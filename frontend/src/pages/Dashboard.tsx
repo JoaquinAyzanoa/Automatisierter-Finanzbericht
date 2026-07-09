@@ -1,55 +1,64 @@
+import { useState } from "react";
+
+import { Sidebar, type NavKey } from "../components/Sidebar";
 import { useAuth } from "../context/AuthContext";
+import "./Dashboard.css";
+
+const SECTIONS: Record<NavKey, { title: string; body: string }> = {
+  entrada: {
+    title: "Entrada de información",
+    body: "Captura y carga los datos financieros que alimentarán tus informes. Este módulo estará disponible próximamente.",
+  },
+  informes: {
+    title: "Informes",
+    body: "Genera, consulta y exporta informes financieros en Excel. Este módulo estará disponible próximamente.",
+  },
+  configuracion: {
+    title: "Configuración",
+    body: "Administra los ajustes de la plataforma y tus preferencias. Este módulo estará disponible próximamente.",
+  },
+  cuenta: {
+    title: "Cuenta",
+    body: "Consulta los detalles de tu cuenta.",
+  },
+};
 
 export function Dashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const [active, setActive] = useState<NavKey>("entrada");
+  const section = SECTIONS[active];
 
   return (
-    <div
-      style={{
-        maxWidth: 720,
-        margin: "0 auto",
-        padding: "48px 24px",
-      }}
-    >
-      <header
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 32,
-        }}
-      >
-        <h1 style={{ margin: 0, fontSize: 22 }}>Automatización de Informes Financieros</h1>
-        <button
-          onClick={logout}
-          style={{
-            border: "1px solid var(--border)",
-            background: "var(--surface)",
-            color: "var(--text)",
-            borderRadius: 8,
-            padding: "8px 14px",
-            cursor: "pointer",
-          }}
-        >
-          Cerrar sesión
-        </button>
-      </header>
+    <div className="app">
+      <Sidebar active={active} onSelect={setActive} />
 
-      <div
-        style={{
-          background: "var(--surface)",
-          border: "1px solid var(--border)",
-          borderRadius: 14,
-          padding: 28,
-          boxShadow: "var(--shadow)",
-        }}
-      >
-        <h2 style={{ marginTop: 0 }}>Bienvenido, {user?.username} 👋</h2>
-        <p style={{ color: "var(--text-muted)", lineHeight: 1.6 }}>
-          Has iniciado sesión{user?.is_admin ? " como administrador" : ""}. Aquí
-          estará la interfaz de generación de informes — selecciona datos
-          financieros y exporta informes en Excel.
-        </p>
+      <div className="app__content">
+        <header className="app__topbar">
+          <h1>{section.title}</h1>
+        </header>
+
+        <main className="app__main">
+          <section className="panel">
+            <p className="panel__lead">{section.body}</p>
+
+            {active === "cuenta" && user && (
+              <dl className="account">
+                <div>
+                  <dt>Usuario</dt>
+                  <dd>{user.username}</dd>
+                </div>
+                <div>
+                  <dt>Rol</dt>
+                  <dd>{user.is_admin ? "Administrador" : "Usuario"}</dd>
+                </div>
+                <div>
+                  <dt>Estado</dt>
+                  <dd>{user.is_active ? "Activo" : "Inactivo"}</dd>
+                </div>
+              </dl>
+            )}
+          </section>
+        </main>
       </div>
     </div>
   );

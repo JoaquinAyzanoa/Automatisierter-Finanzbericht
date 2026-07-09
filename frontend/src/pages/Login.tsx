@@ -33,86 +33,96 @@ export function Login() {
 
   return (
     <div className="login">
-      <div className="login__panel">
-        <div className="login__brand">
-          <div className="login__logo" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="26" height="26" fill="none">
-              <path
-                d="M4 19V5m0 14h16M8 15l3-4 3 3 4-6"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
+      <aside className="login__brand">
+        <div className="login__brandTop">
+          <span className="login__monogram">AF</span>
           <span className="login__brandName">
             Automatización de Informes Financieros
           </span>
         </div>
 
-        <div className="login__header">
-          <h1>Bienvenido de nuevo</h1>
-          <p>Inicia sesión para generar tus informes financieros.</p>
+        <div className="login__brandBody">
+          <div className="login__rule" />
+          <h2>Informes financieros precisos, listos en minutos.</h2>
+          <p>
+            Plataforma corporativa para la generación y consolidación
+            automática de reportes financieros en Excel.
+          </p>
         </div>
 
-        <form className="login__form" onSubmit={handleSubmit} noValidate>
-          {error && (
-            <div className="login__error" role="alert">
-              {error}
-            </div>
-          )}
+        <div className="login__brandFooter">
+          © 2026 · Plataforma de uso interno autorizado
+        </div>
+      </aside>
 
-          <label className="login__field">
-            <span>Usuario</span>
-            <input
-              type="text"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="tu.usuario"
-              autoFocus
-              required
-            />
-          </label>
+      <main className="login__main">
+        <div className="login__card">
+          <div className="login__mobileBrand">
+            <span className="login__monogram login__monogram--sm">AF</span>
+            <span>Automatización de Informes Financieros</span>
+          </div>
 
-          <label className="login__field">
-            <span>Contraseña</span>
-            <div className="login__passwordWrap">
+          <div className="login__header">
+            <h1>Iniciar sesión</h1>
+            <p>Accede con tus credenciales corporativas.</p>
+          </div>
+
+          <form className="login__form" onSubmit={handleSubmit} noValidate>
+            {error && (
+              <div className="login__error" role="alert">
+                {error}
+              </div>
+            )}
+
+            <label className="login__field">
+              <span>Usuario</span>
               <input
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                type="text"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="nombre.apellido"
+                autoFocus
                 required
               />
-              <button
-                type="button"
-                className="login__toggle"
-                onClick={() => setShowPassword((s) => !s)}
-                aria-label={
-                  showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
-                }
-              >
-                {showPassword ? "Ocultar" : "Mostrar"}
-              </button>
-            </div>
-          </label>
+            </label>
 
-          <button
-            type="submit"
-            className="login__submit"
-            disabled={submitting || !username || !password}
-          >
-            {submitting ? "Iniciando sesión…" : "Iniciar sesión"}
-          </button>
-        </form>
+            <label className="login__field">
+              <span>Contraseña</span>
+              <div className="login__passwordWrap">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                />
+                <button
+                  type="button"
+                  className="login__toggle"
+                  onClick={() => setShowPassword((s) => !s)}
+                  aria-label={
+                    showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+                  }
+                >
+                  {showPassword ? "Ocultar" : "Mostrar"}
+                </button>
+              </div>
+            </label>
 
-        <p className="login__footer">
-          Informes financieros automatizados · Acceso seguro
-        </p>
-      </div>
+            <button
+              type="submit"
+              className="login__submit"
+              disabled={submitting || !username || !password}
+            >
+              {submitting ? "Iniciando sesión…" : "Iniciar sesión"}
+            </button>
+          </form>
+
+          <p className="login__footer">Acceso seguro · Conexión cifrada</p>
+        </div>
+      </main>
     </div>
   );
 }

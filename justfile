@@ -1,6 +1,10 @@
 # Justfile for Automatisierter-Finanzbericht
 # Run `just` to list available recipes.
 
+# On Windows, just defaults to `sh` (not present). Use cmd.exe, which also
+# supports the `&&` used below. Other platforms keep the default sh.
+set windows-shell := ["cmd.exe", "/c"]
+
 backend_dir := "backend"
 frontend_dir := "frontend"
 
