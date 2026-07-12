@@ -74,6 +74,31 @@ function esRucNacional(ruc: unknown): boolean {
   return r.length === 11 && /^\d+$/.test(r) && (r.startsWith("10") || r.startsWith("20"));
 }
 
+// Columna de fecha de vencimiento (posibles nombres).
+const FEC_VCTO_ALIASES = [
+  "FEC. VCTO",
+  "FEC.VCTO",
+  "FEC VCTO",
+  "F. VCTO",
+  "F VCTO",
+  "FECHA VCTO",
+  "FECHA DE VENCIMIENTO",
+  "FECHA VENCIMIENTO",
+];
+
+function normCol(s: string): string {
+  return s.replace(/\s+/g, " ").trim().toUpperCase();
+}
+
+// Valor de celda de fecha a ISO (YYYY-MM-DD). Soporta ISO y dd/mm/yyyy.
+function fechaISO(valor: unknown): string {
+  const s = mostrarCelda(valor);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+  if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  return "";
+}
+
 function totalMonto(filas: FilaInforme[]): number {
   return filas.reduce((acc, f) => acc + parseMonto(f["MONTO"]), 0);
 }
@@ -103,11 +128,13 @@ export function Informes({ procesoId }: Props) {
   const [fechaInicioApl, setFechaInicioApl] = useState("");
   const [fechaFinalApl, setFechaFinalApl] = useState("");
   const [otrosOpen, setOtrosOpen] = useState(false);
-  // Buscador y filtros por columna, propios de "Otros".
+  // Buscador, filtros por columna y rango de fechas, propios de "Otros".
   const [otrosBusqueda, setOtrosBusqueda] = useState("");
   const [otrosColFiltros, setOtrosColFiltros] = useState<Record<string, string>>(
     {}
   );
+  const [otrosFechaInicio, setOtrosFechaInicio] = useState("");
+  const [otrosFechaFinal, setOtrosFechaFinal] = useState("");
   // Reasignaciones manuales: id de fila -> posición de operación.
   const [overrides, setOverrides] = useState<Record<number, number>>({});
   // Autoguardado: contador de cambios del usuario + estado.
@@ -133,10 +160,13 @@ export function Informes({ procesoId }: Props) {
         setBusqueda("");
         setOtrosBusqueda("");
         setOtrosColFiltros({});
+        setOtrosFechaInicio("");
+        setOtrosFechaFinal("");
         setFechaInicio(d.fecha_inicio ?? "");
         setFechaFinal(d.fecha_final ?? "");
-        setFechaInicioApl(d.fecha_inicio ?? "");
-        setFechaFinalApl(d.fecha_final ?? "");
+        // El filtro NO se aplica al cargar; solo con el botón "Filtrar".
+        setFechaInicioApl("");
+        setFechaFinalApl("");
         setCambios(0);
         setGuardado("idle");
       })
@@ -180,6 +210,12 @@ export function Informes({ procesoId }: Props) {
     return m;
   }, [operaciones]);
 
+  // Columna FEC. VCTO visible (los filtros de fecha operan sobre ella).
+  const fecVctoCol = useMemo(() => {
+    const set = new Set(FEC_VCTO_ALIASES.map(normCol));
+    return (data?.columnas ?? []).find((c) => set.has(normCol(c))) ?? null;
+  }, [data]);
+
   function etiquetaGrupo(pos: number | null): string {
     if (pos == null) return "Sin categoría";
     const op = opByPos.get(pos);
@@ -189,10 +225,10 @@ export function Informes({ procesoId }: Props) {
   const { grupos, otros } = useMemo<{ grupos: Grupo[]; otros: FilaInforme[] }>(() => {
     if (!data) return { grupos: [], otros: [] };
     const q = busqueda.trim().toLowerCase();
-    const usaFecha = !!data.fecha_columna && !!(fechaInicioApl || fechaFinalApl);
+    const usaFecha = !!fecVctoCol && !!(fechaInicioApl || fechaFinalApl);
 
     const enRango = (f: FilaInforme) => {
-      const fec = String(f["__fec_vcto"] ?? "");
+      const fec = fecVctoCol ? fechaISO(f[fecVctoCol]) : "";
       if (!fec) return false;
       if (fechaInicioApl && fec < fechaInicioApl) return false;
       if (fechaFinalApl && fec > fechaFinalApl) return false;
@@ -239,13 +275,14 @@ export function Informes({ procesoId }: Props) {
 
     return { grupos, otros: fuera };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, busqueda, fechaInicioApl, fechaFinalApl, overrides, opByPos]);
+  }, [data, busqueda, fechaInicioApl, fechaFinalApl, overrides, opByPos, fecVctoCol]);
 
   const otrosFiltrados = useMemo(() => {
     const q = otrosBusqueda.trim().toLowerCase();
     const cols = Object.entries(otrosColFiltros).filter(
       ([, v]) => v.trim() !== ""
     );
+    const usaFecha = !!fecVctoCol && !!(otrosFechaInicio || otrosFechaFinal);
     return otros.filter((f) => {
       if (q) {
         const match = Object.entries(f).some(
@@ -258,9 +295,15 @@ export function Informes({ procesoId }: Props) {
           return false;
         }
       }
+      if (usaFecha) {
+        const fec = fecVctoCol ? fechaISO(f[fecVctoCol]) : "";
+        if (!fec) return false;
+        if (otrosFechaInicio && fec < otrosFechaInicio) return false;
+        if (otrosFechaFinal && fec > otrosFechaFinal) return false;
+      }
       return true;
     });
-  }, [otros, otrosBusqueda, otrosColFiltros]);
+  }, [otros, otrosBusqueda, otrosColFiltros, otrosFechaInicio, otrosFechaFinal, fecVctoCol]);
 
   function reasignar(id: number, pos: number) {
     setOverrides((prev) => ({ ...prev, [id]: pos }));
@@ -280,8 +323,8 @@ export function Informes({ procesoId }: Props) {
     const t = setTimeout(() => {
       setGuardado("guardando");
       guardarProceso(token, id, {
-        fecha_inicio: fechaInicioApl || null,
-        fecha_final: fechaFinalApl || null,
+        fecha_inicio: fechaInicio || null,
+        fecha_final: fechaFinal || null,
         overrides,
       })
         .then((r) => {
@@ -303,8 +346,8 @@ export function Informes({ procesoId }: Props) {
     try {
       // Guarda todo (reasignaciones + rango de fechas) y descarga.
       const blob = await guardarYDescargarProceso(token, data.id, {
-        fecha_inicio: fechaInicioApl || null,
-        fecha_final: fechaFinalApl || null,
+        fecha_inicio: fechaInicio || null,
+        fecha_final: fechaFinal || null,
         overrides: Object.fromEntries(
           Object.entries(overrides).map(([k, v]) => [k, v])
         ),
@@ -352,7 +395,7 @@ export function Informes({ procesoId }: Props) {
 
   function tabla(filas: FilaInforme[], sinCategoria = false): ReactNode {
     return (
-      <TablaScroll>
+      <TablaScroll topScroll={filas.length > 12}>
         <table className="informes__tabla">
           <thead>
             <tr>
@@ -371,17 +414,37 @@ export function Informes({ procesoId }: Props) {
   function tablaOtros(filas: FilaInforme[]): ReactNode {
     return (
       <div className="informes__otrosBody">
-        <div className="informes__otrosSearch">
-          <span className="informes__searchIcon">{searchIcon}</span>
-          <input
-            type="text"
-            className="informes__searchInput"
-            placeholder="Buscar en Otros…"
-            value={otrosBusqueda}
-            onChange={(e) => setOtrosBusqueda(e.target.value)}
-          />
+        <div className="informes__otrosToolbar">
+          <div className="informes__otrosSearch">
+            <span className="informes__searchIcon">{searchIcon}</span>
+            <input
+              type="text"
+              className="informes__searchInput"
+              placeholder="Buscar en Otros…"
+              value={otrosBusqueda}
+              onChange={(e) => setOtrosBusqueda(e.target.value)}
+            />
+          </div>
+          <label className="informes__field">
+            <span>Fecha inicio</span>
+            <input
+              type="date"
+              value={otrosFechaInicio}
+              max={otrosFechaFinal || undefined}
+              onChange={(e) => setOtrosFechaInicio(e.target.value)}
+            />
+          </label>
+          <label className="informes__field">
+            <span>Fecha final</span>
+            <input
+              type="date"
+              value={otrosFechaFinal}
+              min={otrosFechaInicio || undefined}
+              onChange={(e) => setOtrosFechaFinal(e.target.value)}
+            />
+          </label>
         </div>
-        <TablaScroll>
+        <TablaScroll topScroll={filas.length > 12}>
           <table className="informes__tabla">
             <thead>
               <tr>

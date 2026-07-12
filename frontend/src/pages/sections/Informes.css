@@ -270,12 +270,20 @@
   padding: 12px;
 }
 
+.informes__otrosToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
 .informes__otrosSearch {
   position: relative;
   display: flex;
   align-items: center;
+  flex: 1 1 240px;
   max-width: 320px;
-  margin-bottom: 12px;
 }
 
 .informes__filtroRow th {

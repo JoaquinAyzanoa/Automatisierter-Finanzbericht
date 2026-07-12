@@ -6,7 +6,13 @@ import "./TablaScroll.css";
  * Envuelve una tabla ancha y muestra una barra de scroll horizontal ARRIBA
  * (además de la de abajo), sincronizada con el contenido.
  */
-export function TablaScroll({ children }: { children: ReactNode }) {
+export function TablaScroll({
+  children,
+  topScroll = true,
+}: {
+  children: ReactNode;
+  topScroll?: boolean;
+}) {
   const topRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const syncing = useRef(false);
@@ -47,9 +53,11 @@ export function TablaScroll({ children }: { children: ReactNode }) {
 
   return (
     <div className="tablaScroll">
-      <div className="tablaScroll__top" ref={topRef} onScroll={onTop}>
-        <div style={{ width: ancho }} />
-      </div>
+      {topScroll && (
+        <div className="tablaScroll__top" ref={topRef} onScroll={onTop}>
+          <div style={{ width: ancho }} />
+        </div>
+      )}
       <div className="tablaScroll__body" ref={bodyRef} onScroll={onBody}>
         {children}
       </div>
