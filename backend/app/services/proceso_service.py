@@ -3,15 +3,14 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.operacion import Operacion
 from app.models.proceso import Proceso
 from app.repositories.proceso_repository import ProcesoRepository
-from app.services import clasificacion_service, merge_service
-from app.services.excel_utils import ProcesamientoError, write_xlsx
+from app.services import clasificacion_service, detalle_export, merge_service
+from app.services.excel_utils import ProcesamientoError
 
 DESCARGA_FILENAME = "informe_clasificado.xlsx"
 
@@ -109,27 +108,8 @@ class ProcesoService:
         overrides: dict[str, int],
     ) -> Path:
         proceso = self.guardar(proceso_id, fecha_inicio, fecha_final, overrides)
-        return self._construir_xlsx(json.loads(proceso.payload))
-
-    def _construir_xlsx(self, data: dict) -> Path:
-        columnas = data["columnas"]
-        by_pos = {o["pos"]: o for o in data.get("operaciones", [])}
-
-        rows = []
-        for fila in data["filas"]:
-            pos = fila.get("__pos")
-            op = by_pos.get(pos) if pos else None
-            etiqueta = (
-                f"{pos} - {op['texto']} - {op['moneda']}"
-                if op
-                else "Sin categoría"
-            )
-            row = {"OPERACION": etiqueta}
-            for c in columnas:
-                row[c] = fila.get(c, "")
-            rows.append(row)
-
-        df = pd.DataFrame(rows, columns=["OPERACION", *columnas])
+        data = json.loads(proceso.payload)
         output_path = Path(settings.REPORTS_DIR) / DESCARGA_FILENAME
-        write_xlsx(df, output_path, sheet_name="Informe")
-        return output_path
+        return detalle_export.construir_detalle(
+            data, proceso.fecha_inicio, proceso.fecha_final, output_path
+        )
