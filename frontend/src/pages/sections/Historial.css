@@ -1,0 +1,77 @@
+.historial__msg {
+  margin-top: 20px;
+  padding: 14px 16px;
+  font-size: 14px;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.historial__tablaWrap {
+  margin-top: 20px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.historial__tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.historial__tabla th,
+.historial__tabla td {
+  padding: 12px 16px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.historial__tabla th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+}
+
+.historial__tabla tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.historial__tabla tbody tr:hover td {
+  background: var(--surface-muted);
+}
+
+.historial__id {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color: var(--text);
+}
+
+.historial__num {
+  text-align: right;
+}
+
+.historial__acciones {
+  text-align: right;
+}
+
+.historial__ver {
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-contrast);
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.historial__ver:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}

@@ -3,7 +3,12 @@ import type { ReactNode } from "react";
 import { useAuth } from "../context/AuthContext";
 import "./Sidebar.css";
 
-export type NavKey = "entrada" | "informes" | "configuracion" | "cuenta";
+export type NavKey =
+  | "entrada"
+  | "informes"
+  | "historial"
+  | "configuracion"
+  | "cuenta";
 
 interface NavItem {
   key: NavKey;
@@ -40,6 +45,16 @@ const NAV: NavItem[] = [
       <svg {...iconProps}>
         <path d="M4 20V4M4 20h16" />
         <path d="M8 16v-4M12 16V8M16 16v-6" />
+      </svg>
+    ),
+  },
+  {
+    key: "historial",
+    label: "Historial",
+    icon: (
+      <svg {...iconProps}>
+        <path d="M3 12a9 9 0 109-9 9 9 0 00-7 3.3M3 4v3h3" />
+        <path d="M12 7v5l3 2" />
       </svg>
     ),
   },

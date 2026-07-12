@@ -2,6 +2,7 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 
 import {
   ApiError,
+  crearProceso,
   procesarMerge,
   procesarProveedores,
   procesarReporteador,
@@ -34,7 +35,11 @@ const checkIcon = (
   </svg>
 );
 
-export function EntradaInformacion() {
+interface Props {
+  onProcesado?: () => void;
+}
+
+export function EntradaInformacion({ onProcesado }: Props) {
   const { token } = useAuth();
   const [files, setFiles] = useState<Record<FileKey, File | null>>({
     reporteador: null,
@@ -72,9 +77,12 @@ export function EntradaInformacion() {
         files.solesProveedores!
       );
       const merge = await procesarMerge(token);
+      // Registrar el proceso en el historial (ID/hash + snapshot).
+      const proceso = await crearProceso(token);
+      onProcesado?.();
       setStatus({
         type: "ok",
-        msg: `Procesado correctamente — Reporteador: ${reporteador.rows} · Proveedores: ${proveedores.rows} · Merge: ${merge.rows} filas. Descárgalos en la sección «Informes».`,
+        msg: `Procesado correctamente — Reporteador: ${reporteador.rows} · Proveedores: ${proveedores.rows} · Merge: ${merge.rows} filas. Proceso ${proceso.id}. Revísalo en «Informes».`,
       });
     } catch (err) {
       if (err instanceof ApiError) {

@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   ApiError,
-  descargarInformeClasificado,
-  obtenerMergeClasificado,
+  guardarProceso,
+  guardarYDescargarProceso,
+  obtenerProceso,
+  obtenerProcesoLatest,
   triggerBlobDownload,
   type FilaInforme,
-  type MergeClasificado,
+  type ProcesoDetalle,
 } from "../../api/client";
 import { OperacionSelect } from "../../components/OperacionSelect";
 import { useAuth } from "../../context/AuthContext";
@@ -55,9 +57,14 @@ function formatoMonto(n: number): string {
   });
 }
 
-export function Informes() {
+interface Props {
+  /** Proceso a mostrar; si es null se carga el último. */
+  procesoId?: string | null;
+}
+
+export function Informes({ procesoId }: Props) {
   const { token } = useAuth();
-  const [data, setData] = useState<MergeClasificado | null>(null);
+  const [data, setData] = useState<ProcesoDetalle | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [descargando, setDescargando] = useState(false);
@@ -67,20 +74,35 @@ export function Informes() {
   const [otrosOpen, setOtrosOpen] = useState(false);
   // Reasignaciones manuales: id de fila -> posición de operación.
   const [overrides, setOverrides] = useState<Record<number, number>>({});
+  // Autoguardado: contador de cambios del usuario + estado.
+  const [cambios, setCambios] = useState(0);
+  const [guardado, setGuardado] = useState<
+    "idle" | "guardando" | "guardado" | "error"
+  >("idle");
 
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
     setLoading(true);
-    obtenerMergeClasificado(token)
+    setError(null);
+    const cargar = procesoId
+      ? obtenerProceso(token, procesoId)
+      : obtenerProcesoLatest(token);
+    cargar
       .then((d) => {
         if (cancelled) return;
         d.filas = d.filas.map((f, i) => ({ ...f, __id: i }));
         setData(d);
         setOverrides({});
+        setBusqueda("");
+        setFechaInicio(d.fecha_inicio ?? "");
+        setFechaFinal(d.fecha_final ?? "");
+        setCambios(0);
+        setGuardado("idle");
       })
       .catch((err) => {
         if (cancelled) return;
+        setData(null);
         if (err instanceof ApiError && err.status === 404) {
           setError(
             "Aún no hay datos. Procesa los archivos en «Entrada de información»."
@@ -95,7 +117,7 @@ export function Informes() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, procesoId]);
 
   const columnas = data?.columnas ?? [];
   const operaciones = data?.operaciones ?? [];
@@ -160,14 +182,45 @@ export function Informes() {
 
   function reasignar(id: number, pos: number) {
     setOverrides((prev) => ({ ...prev, [id]: pos }));
+    setCambios((c) => c + 1);
   }
 
+  // Autoguardado con debounce tras cada cambio del usuario.
+  useEffect(() => {
+    if (cambios === 0 || !token || !data) return;
+    const id = data.id;
+    const t = setTimeout(() => {
+      setGuardado("guardando");
+      guardarProceso(token, id, {
+        fecha_inicio: fechaInicio || null,
+        fecha_final: fechaFinal || null,
+        overrides,
+      })
+        .then((r) => {
+          setGuardado("guardado");
+          setData((prev) =>
+            prev && prev.id === id ? { ...prev, updated_at: r.updated_at } : prev
+          );
+        })
+        .catch(() => setGuardado("error"));
+    }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cambios]);
+
   async function handleDescargar() {
-    if (!token) return;
+    if (!token || !data) return;
     setDescargando(true);
     setError(null);
     try {
-      const blob = await descargarInformeClasificado(token);
+      // Guarda todo (reasignaciones + rango de fechas) y descarga.
+      const blob = await guardarYDescargarProceso(token, data.id, {
+        fecha_inicio: fechaInicio || null,
+        fecha_final: fechaFinal || null,
+        overrides: Object.fromEntries(
+          Object.entries(overrides).map(([k, v]) => [k, v])
+        ),
+      });
       triggerBlobDownload(blob, "informe_clasificado.xlsx");
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
@@ -251,7 +304,10 @@ export function Informes() {
               type="date"
               value={fechaInicio}
               max={fechaFinal || undefined}
-              onChange={(e) => setFechaInicio(e.target.value)}
+              onChange={(e) => {
+                setFechaInicio(e.target.value);
+                setCambios((c) => c + 1);
+              }}
             />
           </label>
           <label className="informes__field">
@@ -260,11 +316,34 @@ export function Informes() {
               type="date"
               value={fechaFinal}
               min={fechaInicio || undefined}
-              onChange={(e) => setFechaFinal(e.target.value)}
+              onChange={(e) => {
+                setFechaFinal(e.target.value);
+                setCambios((c) => c + 1);
+              }}
             />
           </label>
         </div>
       </div>
+
+      {data && (
+        <div className="informes__proceso">
+          Proceso <strong>{data.id}</strong> · última edición{" "}
+          {new Date(data.updated_at).toLocaleString("es-PE")}
+          {guardado === "guardando" && (
+            <span className="informes__guardado">· Guardando…</span>
+          )}
+          {guardado === "guardado" && (
+            <span className="informes__guardado informes__guardado--ok">
+              · Guardado
+            </span>
+          )}
+          {guardado === "error" && (
+            <span className="informes__guardado informes__guardado--error">
+              · No se pudo guardar
+            </span>
+          )}
+        </div>
+      )}
 
       {error && <div className="informes__msg">{error}</div>}
 

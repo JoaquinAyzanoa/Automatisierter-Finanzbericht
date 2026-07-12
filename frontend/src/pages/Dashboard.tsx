@@ -4,6 +4,7 @@ import { Sidebar, type NavKey } from "../components/Sidebar";
 import { useAuth } from "../context/AuthContext";
 import { Configuracion } from "./sections/Configuracion";
 import { EntradaInformacion } from "./sections/EntradaInformacion";
+import { Historial } from "./sections/Historial";
 import { Informes } from "./sections/Informes";
 import "./Dashboard.css";
 
@@ -15,6 +16,10 @@ const SECTIONS: Record<NavKey, { title: string; body: string }> = {
   informes: {
     title: "Informes",
     body: "Genera, consulta y exporta informes financieros en Excel. Este módulo estará disponible próximamente.",
+  },
+  historial: {
+    title: "Historial",
+    body: "Procesos guardados.",
   },
   configuracion: {
     title: "Configuración",
@@ -29,7 +34,14 @@ const SECTIONS: Record<NavKey, { title: string; body: string }> = {
 export function Dashboard() {
   const { user } = useAuth();
   const [active, setActive] = useState<NavKey>("entrada");
+  // Proceso a mostrar en Informes: null = el último.
+  const [procesoId, setProcesoId] = useState<string | null>(null);
   const section = SECTIONS[active];
+
+  function verProceso(id: string) {
+    setProcesoId(id);
+    setActive("informes");
+  }
 
   return (
     <div className="app">
@@ -42,9 +54,11 @@ export function Dashboard() {
 
         <main className="app__main">
           {active === "entrada" ? (
-            <EntradaInformacion />
+            <EntradaInformacion onProcesado={() => setProcesoId(null)} />
           ) : active === "informes" ? (
-            <Informes />
+            <Informes procesoId={procesoId} />
+          ) : active === "historial" ? (
+            <Historial onVer={verProceso} />
           ) : active === "configuracion" ? (
             <Configuracion />
           ) : (
@@ -52,19 +66,19 @@ export function Dashboard() {
               <p className="panel__lead">{section.body}</p>
 
               {active === "cuenta" && user && (
-              <dl className="account">
-                <div>
-                  <dt>Usuario</dt>
-                  <dd>{user.username}</dd>
-                </div>
-                <div>
-                  <dt>Rol</dt>
-                  <dd>{user.is_admin ? "Administrador" : "Usuario"}</dd>
-                </div>
-                <div>
-                  <dt>Estado</dt>
-                  <dd>{user.is_active ? "Activo" : "Inactivo"}</dd>
-                </div>
+                <dl className="account">
+                  <div>
+                    <dt>Usuario</dt>
+                    <dd>{user.username}</dd>
+                  </div>
+                  <div>
+                    <dt>Rol</dt>
+                    <dd>{user.is_admin ? "Administrador" : "Usuario"}</dd>
+                  </div>
+                  <div>
+                    <dt>Estado</dt>
+                    <dd>{user.is_active ? "Activo" : "Inactivo"}</dd>
+                  </div>
                 </dl>
               )}
             </section>

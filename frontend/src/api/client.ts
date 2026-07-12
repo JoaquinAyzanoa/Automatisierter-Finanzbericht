@@ -268,6 +268,117 @@ export async function descargarInformeClasificado(
   return await res.blob();
 }
 
+// ---- Procesos / Historial -------------------------------------------------
+
+export interface ProcesoResumen {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  fecha_inicio: string | null;
+  fecha_final: string | null;
+  n_filas: number;
+}
+
+export interface ProcesoDetalle extends MergeClasificado {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  fecha_inicio: string | null;
+  fecha_final: string | null;
+}
+
+export async function crearProceso(token: string): Promise<{ id: string }> {
+  const res = await fetch(`${BASE}/procesos`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as { id: string };
+}
+
+export async function listarProcesos(token: string): Promise<ProcesoResumen[]> {
+  const res = await fetch(`${BASE}/procesos`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as ProcesoResumen[];
+}
+
+export async function obtenerProcesoLatest(
+  token: string
+): Promise<ProcesoDetalle> {
+  const res = await fetch(`${BASE}/procesos/latest`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as ProcesoDetalle;
+}
+
+export async function obtenerProceso(
+  token: string,
+  id: string
+): Promise<ProcesoDetalle> {
+  const res = await fetch(`${BASE}/procesos/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as ProcesoDetalle;
+}
+
+export async function guardarProceso(
+  token: string,
+  id: string,
+  body: {
+    fecha_inicio: string | null;
+    fecha_final: string | null;
+    overrides: Record<string, number>;
+  }
+): Promise<{ id: string; updated_at: string }> {
+  const res = await fetch(`${BASE}/procesos/${id}/guardar`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as { id: string; updated_at: string };
+}
+
+export async function guardarYDescargarProceso(
+  token: string,
+  id: string,
+  body: {
+    fecha_inicio: string | null;
+    fecha_final: string | null;
+    overrides: Record<string, number>;
+  }
+): Promise<Blob> {
+  const res = await fetch(`${BASE}/procesos/${id}/descargar`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return await res.blob();
+}
+
 /** Dispara la descarga de un Blob en el navegador. */
 export function triggerBlobDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
