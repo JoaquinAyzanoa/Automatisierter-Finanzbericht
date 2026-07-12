@@ -2,10 +2,10 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-width: 40px;
-  height: 28px;
-  padding: 0 8px;
-  font-size: 13px;
+  min-width: 38px;
+  height: 22px;
+  padding: 0 7px;
+  font-size: 12.5px;
   font-weight: 700;
   color: var(--primary);
   background: rgba(20, 41, 77, 0.07);

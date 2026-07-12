@@ -57,6 +57,18 @@ def _etiqueta(pos: int, op: Operacion) -> str:
     return f"Operación {pos} - {op.texto}" if op.texto else f"Operación {pos}"
 
 
+_DATETIME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$")
+
+
+def _strip_hora(value):
+    """Quita la hora de valores datetime ('2025-06-15 00:00:00' -> '2025-06-15')."""
+    if isinstance(value, str):
+        m = _DATETIME_RE.match(value)
+        if m:
+            return m.group(1)
+    return value
+
+
 def _norm(name: str) -> str:
     return re.sub(r"\s+", " ", str(name)).strip().upper()
 
@@ -112,6 +124,7 @@ def clasificar_merge(path: Path, operaciones: list[Operacion]) -> dict:
     incluye la lista de operaciones para que el frontend arme el desplegable.
     """
     df = pd.read_excel(path, dtype=str).fillna("")
+    df = df.map(_strip_hora)
     columnas = list(df.columns)
 
     ruc_col = _resolve_col(df, "RUC")

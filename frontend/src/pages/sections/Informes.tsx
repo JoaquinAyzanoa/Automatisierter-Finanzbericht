@@ -11,6 +11,7 @@ import {
   type ProcesoDetalle,
 } from "../../api/client";
 import { OperacionSelect } from "../../components/OperacionSelect";
+import { TablaScroll } from "../../components/TablaScroll";
 import { useAuth } from "../../context/AuthContext";
 import "./Informes.css";
 
@@ -34,6 +35,18 @@ const chevron = (
   </svg>
 );
 
+// Columnas que van primero en la tabla (si existen).
+const COLUMNAS_PRIORIDAD = ["MONEDA", "PROVEEDOR", "PRODUCTO"];
+
+// Renombrado de encabezados solo para mostrar.
+const ETIQUETAS_COLUMNA: Record<string, string> = {
+  NUMERO: "N° DOCUMENTO",
+};
+
+function etiquetaColumna(c: string): string {
+  return ETIQUETAS_COLUMNA[c.trim().toUpperCase()] ?? c;
+}
+
 interface Grupo {
   pos: number | null;
   label: string;
@@ -44,6 +57,13 @@ interface Grupo {
 function parseMonto(valor: unknown): number {
   const n = parseFloat(String(valor ?? "").replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
+}
+
+// Quita la hora de valores tipo "2025-06-15 00:00:00" -> "2025-06-15".
+function mostrarCelda(valor: unknown): string {
+  const s = String(valor ?? "");
+  const m = /^(\d{4}-\d{2}-\d{2})[ T]\d{2}:\d{2}:\d{2}/.exec(s);
+  return m ? m[1] : s;
 }
 
 function totalMonto(filas: FilaInforme[]): number {
@@ -119,8 +139,20 @@ export function Informes({ procesoId }: Props) {
     };
   }, [token, procesoId]);
 
-  const columnas = data?.columnas ?? [];
   const operaciones = data?.operaciones ?? [];
+
+  // Reordena las columnas: MONEDA, PROVEEDOR, PRODUCTO primero; el resto después.
+  const columnas = useMemo(() => {
+    const todas = data?.columnas ?? [];
+    const norm = (s: string) => s.trim().toUpperCase();
+    const primeras: string[] = [];
+    for (const p of COLUMNAS_PRIORIDAD) {
+      const encontrada = todas.find((c) => norm(c) === p);
+      if (encontrada) primeras.push(encontrada);
+    }
+    const resto = todas.filter((c) => !primeras.includes(c));
+    return [...primeras, ...resto];
+  }, [data]);
 
   const opByPos = useMemo(() => {
     const m = new Map<number, (typeof operaciones)[number]>();
@@ -235,13 +267,13 @@ export function Informes({ procesoId }: Props) {
 
   function tabla(filas: FilaInforme[]): ReactNode {
     return (
-      <div className="informes__tablaWrap">
+      <TablaScroll>
         <table className="informes__tabla">
           <thead>
             <tr>
               <th className="informes__opCol">Op.</th>
               {columnas.map((c) => (
-                <th key={c}>{c}</th>
+                <th key={c}>{etiquetaColumna(c)}</th>
               ))}
             </tr>
           </thead>
@@ -260,21 +292,21 @@ export function Informes({ procesoId }: Props) {
                     />
                   </td>
                   {columnas.map((c) => (
-                    <td key={c}>{String(f[c] ?? "")}</td>
+                    <td key={c}>{mostrarCelda(f[c])}</td>
                   ))}
                 </tr>
               );
             })}
           </tbody>
         </table>
-      </div>
+      </TablaScroll>
     );
   }
 
   const hayDatos = !!data && data.filas.length > 0;
 
   return (
-    <section className="panel panel--compact">
+    <section className="panel panel--compact panel--wide">
       <div className="informes__toolbar">
         <div className="informes__search">
           <span className="informes__searchIcon">{searchIcon}</span>

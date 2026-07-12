@@ -50,6 +50,10 @@
   padding-bottom: 18px;
 }
 
+.panel--wide {
+  max-width: none;
+}
+
 .panel__lead {
   margin: 0;
   max-width: 640px;

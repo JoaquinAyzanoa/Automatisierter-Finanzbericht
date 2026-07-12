@@ -1,0 +1,13 @@
+.tablaScroll__top {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid var(--border);
+}
+
+.tablaScroll__top > div {
+  height: 1px;
+}
+
+.tablaScroll__body {
+  overflow-x: auto;
+}
