@@ -12,6 +12,7 @@ class OperacionCreate(BaseModel):
     moneda: Moneda = "SOL"
     ambito: Ambito = "Nacional"
     tags: list[str] = []
+    respeta_filtro: bool = True
 
 
 class OperacionUpdate(BaseModel):
@@ -19,6 +20,7 @@ class OperacionUpdate(BaseModel):
     moneda: Moneda | None = None
     ambito: Ambito | None = None
     tags: list[str] | None = None
+    respeta_filtro: bool | None = None
 
 
 class OperacionRead(BaseModel):
@@ -29,4 +31,5 @@ class OperacionRead(BaseModel):
     moneda: Moneda
     ambito: Ambito
     tags: list[str]
+    respeta_filtro: bool
     created_at: datetime

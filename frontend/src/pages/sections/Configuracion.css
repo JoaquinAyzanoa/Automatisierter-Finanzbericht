@@ -153,6 +153,23 @@
   color: var(--text);
 }
 
+.config__filtroSelect {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  outline: none;
+}
+
+.config__filtroSelect:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
 .config__tags {
   flex: 1;
   display: flex;

@@ -42,7 +42,7 @@ def es_ruc_nacional(ruc) -> bool:
 
 
 def _posicion_objetivo(ruc, moneda) -> int | None:
-    """Posición (1-based) de la operación destino según las reglas."""
+    """Posición (1-based) de la operación destino según las reglas por defecto."""
     if es_ruc_nacional(ruc):
         m = str(moneda).strip().upper()
         if m == "SOL":
@@ -51,6 +51,27 @@ def _posicion_objetivo(ruc, moneda) -> int | None:
             return 2
         return None
     return 6  # exterior
+
+
+def _ambito_fila(ruc) -> str:
+    return "Nacional" if es_ruc_nacional(ruc) else "Exterior"
+
+
+def _posicion_por_tags(
+    contenido: str, row_moneda: str, row_ambito: str, operaciones
+) -> int | None:
+    """Si algún tag de una categoría (con misma moneda/ámbito que la fila)
+    aparece en el contenido, devuelve su posición. Prevalece sobre lo demás."""
+    for i, op in enumerate(operaciones):
+        if str(op.moneda).strip().upper() != row_moneda:
+            continue
+        if str(op.ambito).strip() != row_ambito:
+            continue
+        for tag in op.tags or []:
+            t = str(tag).strip().lower()
+            if t and t in contenido:
+                return i + 1
+    return None
 
 
 def _etiqueta(pos: int, op: Operacion) -> str:
@@ -137,7 +158,15 @@ def clasificar_merge(path: Path, operaciones: list[Operacion]) -> dict:
     for idx, rec in enumerate(filas):
         ruc = rec.get(ruc_col, "") if ruc_col else ""
         moneda = rec.get(moneda_col, "") if moneda_col else ""
-        pos = _posicion_objetivo(ruc, moneda)
+        contenido = " ".join(str(v) for v in rec.values()).lower()
+        row_moneda = str(moneda).strip().upper()
+        row_ambito = _ambito_fila(ruc)
+
+        # Los tags prevalecen (respetando moneda/ámbito de la categoría).
+        pos = _posicion_por_tags(contenido, row_moneda, row_ambito, operaciones)
+        if pos is None:
+            pos = _posicion_objetivo(ruc, moneda)
+
         rec["__pos"] = pos if (pos and pos <= n) else None
         if iso_list is not None:
             rec["__fec_vcto"] = iso_list[idx]
@@ -148,6 +177,9 @@ def clasificar_merge(path: Path, operaciones: list[Operacion]) -> dict:
             "texto": op.texto,
             "moneda": op.moneda,
             "ambito": op.ambito,
+            "respeta_filtro": bool(
+                op.respeta_filtro if op.respeta_filtro is not None else True
+            ),
         }
         for i, op in enumerate(operaciones)
     ]

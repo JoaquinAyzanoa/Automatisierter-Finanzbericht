@@ -148,6 +148,7 @@ export interface Operacion {
   moneda: Moneda;
   ambito: Ambito;
   tags: string[];
+  respeta_filtro: boolean;
   created_at: string;
 }
 
@@ -213,7 +214,13 @@ export async function eliminarOperacion(
 
 export async function reemplazarOperaciones(
   token: string,
-  items: { texto: string; moneda: Moneda; ambito: Ambito; tags: string[] }[]
+  items: {
+    texto: string;
+    moneda: Moneda;
+    ambito: Ambito;
+    tags: string[];
+    respeta_filtro: boolean;
+  }[]
 ): Promise<Operacion[]> {
   const res = await fetch(`${BASE}/operaciones`, {
     method: "PUT",
@@ -234,6 +241,7 @@ export interface OperacionOpcion {
   texto: string;
   moneda: Moneda;
   ambito: Ambito;
+  respeta_filtro: boolean;
 }
 
 export type FilaInforme = Record<string, string | number | null>;

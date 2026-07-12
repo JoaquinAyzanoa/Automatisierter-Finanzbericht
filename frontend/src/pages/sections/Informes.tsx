@@ -179,6 +179,10 @@ export function Informes({ procesoId }: Props) {
       return true;
     };
 
+    // Operaciones que NO respetan el filtro de fechas (sus filas nunca van a "Otros").
+    const noRespeta = new Map<number, boolean>();
+    for (const o of operaciones) noRespeta.set(o.pos, !o.respeta_filtro);
+
     const dentro: FilaInforme[] = [];
     const fuera: FilaInforme[] = [];
     for (const f of data.filas) {
@@ -188,7 +192,10 @@ export function Informes({ procesoId }: Props) {
         );
         if (!match) continue;
       }
-      if (usaFecha && !enRango(f)) fuera.push(f);
+      const id = f["__id"] as number;
+      const eff = id in overrides ? overrides[id] : (f["__pos"] as number | null);
+      const exenta = eff != null && noRespeta.get(eff) === true;
+      if (usaFecha && !exenta && !enRango(f)) fuera.push(f);
       else dentro.push(f);
     }
 

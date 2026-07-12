@@ -15,6 +15,7 @@ interface FilaOp {
   moneda: Moneda;
   ambito: Ambito;
   tags: string[];
+  respetaFiltro: boolean;
 }
 
 const trashIcon = (
@@ -47,6 +48,7 @@ export function Configuracion() {
               moneda: o.moneda,
               ambito: o.ambito,
               tags: o.tags ?? [],
+              respetaFiltro: o.respeta_filtro ?? true,
             }))
           );
         }
@@ -70,7 +72,14 @@ export function Configuracion() {
   function agregar() {
     setOperaciones((prev) => [
       ...prev,
-      { id: tempId.current--, texto: "", moneda: "SOL", ambito: "Nacional", tags: [] },
+      {
+        id: tempId.current--,
+        texto: "",
+        moneda: "SOL",
+        ambito: "Nacional",
+        tags: [],
+        respetaFiltro: true,
+      },
     ]);
     markDirty();
   }
@@ -119,6 +128,7 @@ export function Configuracion() {
         moneda: o.moneda,
         ambito: o.ambito,
         tags: o.tags,
+        respeta_filtro: o.respetaFiltro,
       }));
       const result = await reemplazarOperaciones(token, items);
       setOperaciones(
@@ -128,6 +138,7 @@ export function Configuracion() {
           moneda: o.moneda,
           ambito: o.ambito,
           tags: o.tags ?? [],
+          respetaFiltro: o.respeta_filtro ?? true,
         }))
       );
       setDirty(false);
@@ -227,6 +238,16 @@ export function Configuracion() {
                 <span className="config__tagLabel">
                   {index + 1} - {op.texto || "(sin nombre)"} - {op.moneda}
                 </span>
+                <select
+                  className="config__filtroSelect"
+                  value={op.respetaFiltro ? "si" : "no"}
+                  onChange={(e) =>
+                    setLocal(op.id, { respetaFiltro: e.target.value === "si" })
+                  }
+                >
+                  <option value="si">Respetar filtro de fecha</option>
+                  <option value="no">No respetar filtro de fecha</option>
+                </select>
                 <div className="config__tags">
                   {op.tags.map((tag) => (
                     <span key={tag} className="config__tag">

@@ -20,10 +20,19 @@ class OperacionRepository:
         return self.db.get(Operacion, operacion_id)
 
     def create(
-        self, texto: str, moneda: str, ambito: str, tags: list[str] | None = None
+        self,
+        texto: str,
+        moneda: str,
+        ambito: str,
+        tags: list[str] | None = None,
+        respeta_filtro: bool = True,
     ) -> Operacion:
         operacion = Operacion(
-            texto=texto, moneda=moneda, ambito=ambito, tags=tags or []
+            texto=texto,
+            moneda=moneda,
+            ambito=ambito,
+            tags=tags or [],
+            respeta_filtro=respeta_filtro,
         )
         self.db.add(operacion)
         self.db.commit()
@@ -37,6 +46,7 @@ class OperacionRepository:
         moneda: str | None = None,
         ambito: str | None = None,
         tags: list[str] | None = None,
+        respeta_filtro: bool | None = None,
     ) -> Operacion:
         if texto is not None:
             operacion.texto = texto
@@ -46,6 +56,8 @@ class OperacionRepository:
             operacion.ambito = ambito
         if tags is not None:
             operacion.tags = tags
+        if respeta_filtro is not None:
+            operacion.respeta_filtro = respeta_filtro
         self.db.commit()
         self.db.refresh(operacion)
         return operacion
@@ -55,13 +67,19 @@ class OperacionRepository:
         self.db.commit()
 
     def replace_all(
-        self, items: list[tuple[str, str, str, list[str]]]
+        self, items: list[tuple[str, str, str, list[str], bool]]
     ) -> list[Operacion]:
         """Reemplaza toda la lista de operaciones en una sola transacción."""
         self.db.execute(delete(Operacion))
-        for texto, moneda, ambito, tags in items:
+        for texto, moneda, ambito, tags, respeta_filtro in items:
             self.db.add(
-                Operacion(texto=texto, moneda=moneda, ambito=ambito, tags=tags)
+                Operacion(
+                    texto=texto,
+                    moneda=moneda,
+                    ambito=ambito,
+                    tags=tags,
+                    respeta_filtro=respeta_filtro,
+                )
             )
         self.db.commit()
         return self.list()

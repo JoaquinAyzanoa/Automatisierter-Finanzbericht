@@ -79,5 +79,41 @@ def test_clasificar_merge_parsea_fec_vcto(tmp_path):
         "texto": "Pago masivo proveedores",
         "moneda": "SOL",
         "ambito": "Nacional",
+        "respeta_filtro": True,
     }
     assert len(result["operaciones"]) == 6
+
+
+def test_tag_prevalece_respetando_moneda(tmp_path):
+    ops = [
+        Operacion(texto="Pago masivo", moneda="SOL", ambito="Nacional", tags=[]),  # 1
+        Operacion(texto="Pago masivo", moneda="USD", ambito="Nacional", tags=[]),  # 2
+        Operacion(
+            texto="Pagos servicios",
+            moneda="SOL",
+            ambito="Nacional",
+            tags=["transporte"],
+        ),  # 3
+        Operacion(texto="X", moneda="SOL", ambito="Nacional", tags=[]),  # 4
+        Operacion(texto="Y", moneda="SOL", ambito="Nacional", tags=[]),  # 5
+        Operacion(texto="Exterior", moneda="USD", ambito="Exterior", tags=[]),  # 6
+    ]
+    df = pd.DataFrame(
+        {
+            "MONEDA": ["SOL", "USD"],
+            "RUC": ["20550372640", "20550372640"],  # ambos nacionales
+            "PRODUCTO": [
+                "SERVICIO DE TRANSPORTE LOCAL",
+                "SERVICIO DE TRANSPORTE LOCAL",
+            ],
+            "MONTO": ["100", "200"],
+        }
+    )
+    path = tmp_path / "merge.xlsx"
+    write_xlsx(df, path, "Merge")
+
+    result = clasificar_merge(path, ops)
+    # SOL + tag "transporte" -> op 3 (prevalece sobre el default op 1).
+    assert result["filas"][0]["__pos"] == 3
+    # USD: la op con ese tag es SOL, no aplica -> default nacional+USD -> op 2.
+    assert result["filas"][1]["__pos"] == 2
