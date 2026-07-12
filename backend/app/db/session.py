@@ -31,6 +31,7 @@ def init_db() -> None:
     from app.db.base import Base
 
     # Import models so they are registered on Base.metadata before create_all.
+    import app.models.operacion  # noqa: F401
     import app.models.report  # noqa: F401
     import app.models.user  # noqa: F401
 

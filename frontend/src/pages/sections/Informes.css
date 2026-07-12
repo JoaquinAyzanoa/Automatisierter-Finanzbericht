@@ -1,0 +1,125 @@
+.informes__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.informes__search {
+  position: relative;
+  flex: 1 1 260px;
+  display: flex;
+  align-items: center;
+}
+
+.informes__searchIcon {
+  position: absolute;
+  left: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.informes__searchInput {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px 0 38px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.informes__searchInput::placeholder {
+  color: #9aa4b3;
+}
+
+.informes__searchInput:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.informes__download {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary-contrast);
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.informes__download:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.informes__downloadIcon {
+  display: grid;
+  place-items: center;
+}
+
+.informes__dates {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.informes__field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.informes__field > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.informes__field input {
+  height: 40px;
+  padding: 0 12px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.informes__field input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+@media (max-width: 760px) {
+  .informes__search {
+    flex-basis: 100%;
+  }
+
+  .informes__dates {
+    flex: 1 1 100%;
+  }
+
+  .informes__field {
+    flex: 1;
+  }
+
+  .informes__field input {
+    flex: 1;
+    min-width: 0;
+  }
+}

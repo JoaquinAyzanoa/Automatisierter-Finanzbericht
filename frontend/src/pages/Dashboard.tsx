@@ -2,7 +2,9 @@ import { useState } from "react";
 
 import { Sidebar, type NavKey } from "../components/Sidebar";
 import { useAuth } from "../context/AuthContext";
+import { Configuracion } from "./sections/Configuracion";
 import { EntradaInformacion } from "./sections/EntradaInformacion";
+import { Informes } from "./sections/Informes";
 import "./Dashboard.css";
 
 const SECTIONS: Record<NavKey, { title: string; body: string }> = {
@@ -41,6 +43,10 @@ export function Dashboard() {
         <main className="app__main">
           {active === "entrada" ? (
             <EntradaInformacion />
+          ) : active === "informes" ? (
+            <Informes />
+          ) : active === "configuracion" ? (
+            <Configuracion />
           ) : (
             <section className="panel">
               <p className="panel__lead">{section.body}</p>

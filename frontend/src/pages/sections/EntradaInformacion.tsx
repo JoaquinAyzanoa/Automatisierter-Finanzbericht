@@ -1,5 +1,12 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 
+import {
+  ApiError,
+  procesarMerge,
+  procesarProveedores,
+  procesarReporteador,
+} from "../../api/client";
+import { useAuth } from "../../context/AuthContext";
 import "./EntradaInformacion.css";
 
 const FILE_ACCEPT = ".xls,.xlsx,.csv";
@@ -28,6 +35,7 @@ const checkIcon = (
 );
 
 export function EntradaInformacion() {
+  const { token } = useAuth();
   const [files, setFiles] = useState<Record<FileKey, File | null>>({
     reporteador: null,
     dolaresProveedores: null,
@@ -49,23 +57,34 @@ export function EntradaInformacion() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!canProcess) return;
+    if (!canProcess || !token) return;
 
     setProcessing(true);
     setStatus(null);
     try {
-      // TODO: enviar los archivos y el Sharepoint del mes al backend
-      // (FormData -> POST /api/v1/...) cuando el endpoint esté disponible.
-      await new Promise((resolve) => setTimeout(resolve, 900));
+      // 1) Reporteador (limpieza) 2) Proveedores (combinar USD/SOL)
+      // 3) Merge (proveedores + reporteador por RUC y NUMERO).
+      // El Sharepoint del mes se integrará después.
+      const reporteador = await procesarReporteador(token, files.reporteador!);
+      const proveedores = await procesarProveedores(
+        token,
+        files.dolaresProveedores!,
+        files.solesProveedores!
+      );
+      const merge = await procesarMerge(token);
       setStatus({
         type: "ok",
-        msg: "Datos recibidos correctamente. El procesamiento se conectará al backend próximamente.",
+        msg: `Procesado correctamente — Reporteador: ${reporteador.rows} · Proveedores: ${proveedores.rows} · Merge: ${merge.rows} filas. Descárgalos en la sección «Informes».`,
       });
-    } catch {
-      setStatus({
-        type: "error",
-        msg: "No se pudo procesar la información. Inténtalo de nuevo.",
-      });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setStatus({ type: "error", msg: err.message });
+      } else {
+        setStatus({
+          type: "error",
+          msg: "No se pudo procesar la información. Inténtalo de nuevo.",
+        });
+      }
     } finally {
       setProcessing(false);
     }

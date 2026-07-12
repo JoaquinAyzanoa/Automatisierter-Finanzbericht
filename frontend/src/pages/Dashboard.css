@@ -44,6 +44,11 @@
   box-shadow: var(--shadow);
 }
 
+.panel--compact {
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
 .panel__lead {
   margin: 0;
   max-width: 640px;

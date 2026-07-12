@@ -6,12 +6,14 @@ dependencies = [
     "bcrypt>=5.0.0",
     "fastapi",
     "openpyxl",
+    "pandas>=3.0.3",
     "pydantic",
     "pydantic-settings",
     "pyjwt>=2.13.0",
     "python-multipart",
     "sqlalchemy",
     "uvicorn[standard]",
+    "xlrd>=2.0.2",
 ]
 
 [dependency-groups]
