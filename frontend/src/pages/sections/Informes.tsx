@@ -66,6 +66,14 @@ function mostrarCelda(valor: unknown): string {
   return m ? m[1] : s;
 }
 
+// RUC nacional: 11 dígitos que empiezan con 10 o 20.
+function esRucNacional(ruc: unknown): boolean {
+  const r = String(ruc ?? "")
+    .trim()
+    .replace(/\.0$/, "");
+  return r.length === 11 && /^\d+$/.test(r) && (r.startsWith("10") || r.startsWith("20"));
+}
+
 function totalMonto(filas: FilaInforme[]): number {
   return filas.reduce((acc, f) => acc + parseMonto(f["MONTO"]), 0);
 }
@@ -91,7 +99,15 @@ export function Informes({ procesoId }: Props) {
   const [busqueda, setBusqueda] = useState("");
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFinal, setFechaFinal] = useState("");
+  // Rango aplicado (solo al pulsar "Filtrar").
+  const [fechaInicioApl, setFechaInicioApl] = useState("");
+  const [fechaFinalApl, setFechaFinalApl] = useState("");
   const [otrosOpen, setOtrosOpen] = useState(false);
+  // Buscador y filtros por columna, propios de "Otros".
+  const [otrosBusqueda, setOtrosBusqueda] = useState("");
+  const [otrosColFiltros, setOtrosColFiltros] = useState<Record<string, string>>(
+    {}
+  );
   // Reasignaciones manuales: id de fila -> posición de operación.
   const [overrides, setOverrides] = useState<Record<number, number>>({});
   // Autoguardado: contador de cambios del usuario + estado.
@@ -115,8 +131,12 @@ export function Informes({ procesoId }: Props) {
         setData(d);
         setOverrides({});
         setBusqueda("");
+        setOtrosBusqueda("");
+        setOtrosColFiltros({});
         setFechaInicio(d.fecha_inicio ?? "");
         setFechaFinal(d.fecha_final ?? "");
+        setFechaInicioApl(d.fecha_inicio ?? "");
+        setFechaFinalApl(d.fecha_final ?? "");
         setCambios(0);
         setGuardado("idle");
       })
@@ -169,13 +189,13 @@ export function Informes({ procesoId }: Props) {
   const { grupos, otros } = useMemo<{ grupos: Grupo[]; otros: FilaInforme[] }>(() => {
     if (!data) return { grupos: [], otros: [] };
     const q = busqueda.trim().toLowerCase();
-    const usaFecha = !!data.fecha_columna && !!(fechaInicio || fechaFinal);
+    const usaFecha = !!data.fecha_columna && !!(fechaInicioApl || fechaFinalApl);
 
     const enRango = (f: FilaInforme) => {
       const fec = String(f["__fec_vcto"] ?? "");
       if (!fec) return false;
-      if (fechaInicio && fec < fechaInicio) return false;
-      if (fechaFinal && fec > fechaFinal) return false;
+      if (fechaInicioApl && fec < fechaInicioApl) return false;
+      if (fechaFinalApl && fec > fechaFinalApl) return false;
       return true;
     };
 
@@ -193,9 +213,11 @@ export function Informes({ procesoId }: Props) {
         if (!match) continue;
       }
       const id = f["__id"] as number;
-      const eff = id in overrides ? overrides[id] : (f["__pos"] as number | null);
+      const hasOverride = id in overrides;
+      const eff = hasOverride ? overrides[id] : (f["__pos"] as number | null);
       const exenta = eff != null && noRespeta.get(eff) === true;
-      if (usaFecha && !exenta && !enRango(f)) fuera.push(f);
+      // Fuera del filtro va a "Otros", salvo que esté exenta o ya reasignada.
+      if (usaFecha && !exenta && !hasOverride && !enRango(f)) fuera.push(f);
       else dentro.push(f);
     }
 
@@ -217,10 +239,37 @@ export function Informes({ procesoId }: Props) {
 
     return { grupos, otros: fuera };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, busqueda, fechaInicio, fechaFinal, overrides, opByPos]);
+  }, [data, busqueda, fechaInicioApl, fechaFinalApl, overrides, opByPos]);
+
+  const otrosFiltrados = useMemo(() => {
+    const q = otrosBusqueda.trim().toLowerCase();
+    const cols = Object.entries(otrosColFiltros).filter(
+      ([, v]) => v.trim() !== ""
+    );
+    return otros.filter((f) => {
+      if (q) {
+        const match = Object.entries(f).some(
+          ([k, v]) => !k.startsWith("__") && String(v).toLowerCase().includes(q)
+        );
+        if (!match) return false;
+      }
+      for (const [col, val] of cols) {
+        if (!mostrarCelda(f[col]).toLowerCase().includes(val.trim().toLowerCase())) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [otros, otrosBusqueda, otrosColFiltros]);
 
   function reasignar(id: number, pos: number) {
     setOverrides((prev) => ({ ...prev, [id]: pos }));
+    setCambios((c) => c + 1);
+  }
+
+  function aplicarFiltro() {
+    setFechaInicioApl(fechaInicio);
+    setFechaFinalApl(fechaFinal);
     setCambios((c) => c + 1);
   }
 
@@ -231,8 +280,8 @@ export function Informes({ procesoId }: Props) {
     const t = setTimeout(() => {
       setGuardado("guardando");
       guardarProceso(token, id, {
-        fecha_inicio: fechaInicio || null,
-        fecha_final: fechaFinal || null,
+        fecha_inicio: fechaInicioApl || null,
+        fecha_final: fechaFinalApl || null,
         overrides,
       })
         .then((r) => {
@@ -254,8 +303,8 @@ export function Informes({ procesoId }: Props) {
     try {
       // Guarda todo (reasignaciones + rango de fechas) y descarga.
       const blob = await guardarYDescargarProceso(token, data.id, {
-        fecha_inicio: fechaInicio || null,
-        fecha_final: fechaFinal || null,
+        fecha_inicio: fechaInicioApl || null,
+        fecha_final: fechaFinalApl || null,
         overrides: Object.fromEntries(
           Object.entries(overrides).map(([k, v]) => [k, v])
         ),
@@ -272,7 +321,36 @@ export function Informes({ procesoId }: Props) {
     }
   }
 
-  function tabla(filas: FilaInforme[]): ReactNode {
+  function renderFila(f: FilaInforme, sinCategoria: boolean): ReactNode {
+    const id = f["__id"] as number;
+    const eff = id in overrides ? overrides[id] : (f["__pos"] as number | null);
+    // En "Otros" la fila se muestra sin categoría (hasta que se asigne).
+    const valor = sinCategoria ? null : eff;
+    // Solo categorías del mismo ámbito (Nacional/Exterior) y, dentro, misma moneda.
+    const rowMoneda = String(f["MONEDA"] ?? "").trim().toUpperCase();
+    const rowAmbito = esRucNacional(f["RUC"]) ? "Nacional" : "Exterior";
+    const porAmbito = operaciones.filter((o) => o.ambito === rowAmbito);
+    const porMoneda = porAmbito.filter(
+      (o) => String(o.moneda).toUpperCase() === rowMoneda
+    );
+    const opcionesFila = porMoneda.length > 0 ? porMoneda : porAmbito;
+    return (
+      <tr key={id}>
+        <td className="informes__opCol">
+          <OperacionSelect
+            value={valor}
+            options={opcionesFila}
+            onChange={(pos) => reasignar(id, pos)}
+          />
+        </td>
+        {columnas.map((c) => (
+          <td key={c}>{mostrarCelda(f[c])}</td>
+        ))}
+      </tr>
+    );
+  }
+
+  function tabla(filas: FilaInforme[], sinCategoria = false): ReactNode {
     return (
       <TablaScroll>
         <table className="informes__tabla">
@@ -284,29 +362,58 @@ export function Informes({ procesoId }: Props) {
               ))}
             </tr>
           </thead>
-          <tbody>
-            {filas.map((f) => {
-              const id = f["__id"] as number;
-              const eff =
-                id in overrides ? overrides[id] : (f["__pos"] as number | null);
-              return (
-                <tr key={id}>
-                  <td className="informes__opCol">
-                    <OperacionSelect
-                      value={eff}
-                      options={operaciones}
-                      onChange={(pos) => reasignar(id, pos)}
-                    />
-                  </td>
-                  {columnas.map((c) => (
-                    <td key={c}>{mostrarCelda(f[c])}</td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
+          <tbody>{filas.map((f) => renderFila(f, sinCategoria))}</tbody>
         </table>
       </TablaScroll>
+    );
+  }
+
+  function tablaOtros(filas: FilaInforme[]): ReactNode {
+    return (
+      <div className="informes__otrosBody">
+        <div className="informes__otrosSearch">
+          <span className="informes__searchIcon">{searchIcon}</span>
+          <input
+            type="text"
+            className="informes__searchInput"
+            placeholder="Buscar en Otros…"
+            value={otrosBusqueda}
+            onChange={(e) => setOtrosBusqueda(e.target.value)}
+          />
+        </div>
+        <TablaScroll>
+          <table className="informes__tabla">
+            <thead>
+              <tr>
+                <th className="informes__opCol">Op.</th>
+                {columnas.map((c) => (
+                  <th key={c}>{etiquetaColumna(c)}</th>
+                ))}
+              </tr>
+              <tr className="informes__filtroRow">
+                <th className="informes__opCol"></th>
+                {columnas.map((c) => (
+                  <th key={c}>
+                    <input
+                      type="text"
+                      className="informes__colFiltro"
+                      placeholder="Filtrar"
+                      value={otrosColFiltros[c] ?? ""}
+                      onChange={(e) =>
+                        setOtrosColFiltros((prev) => ({
+                          ...prev,
+                          [c]: e.target.value,
+                        }))
+                      }
+                    />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>{filas.map((f) => renderFila(f, true))}</tbody>
+          </table>
+        </TablaScroll>
+      </div>
     );
   }
 
@@ -343,10 +450,7 @@ export function Informes({ procesoId }: Props) {
               type="date"
               value={fechaInicio}
               max={fechaFinal || undefined}
-              onChange={(e) => {
-                setFechaInicio(e.target.value);
-                setCambios((c) => c + 1);
-              }}
+              onChange={(e) => setFechaInicio(e.target.value)}
             />
           </label>
           <label className="informes__field">
@@ -355,13 +459,18 @@ export function Informes({ procesoId }: Props) {
               type="date"
               value={fechaFinal}
               min={fechaInicio || undefined}
-              onChange={(e) => {
-                setFechaFinal(e.target.value);
-                setCambios((c) => c + 1);
-              }}
+              onChange={(e) => setFechaFinal(e.target.value)}
             />
           </label>
         </div>
+
+        <button
+          type="button"
+          className="informes__filtrar"
+          onClick={aplicarFiltro}
+        >
+          Filtrar
+        </button>
       </div>
 
       {data && (
@@ -427,14 +536,14 @@ export function Informes({ procesoId }: Props) {
                       >
                         {chevron}
                       </span>
-                      Otros (fuera del rango de fechas)
+                      Otros (fuera del filtro inicial)
                     </span>
                     <span className="informes__grupoMeta">
-                      {otros.length} filas · Total{" "}
-                      {formatoMonto(totalMonto(otros))}
+                      {otrosFiltrados.length} filas · Total{" "}
+                      {formatoMonto(totalMonto(otrosFiltrados))}
                     </span>
                   </button>
-                  {otrosAbierto && tabla(otros)}
+                  {otrosAbierto && tablaOtros(otrosFiltrados)}
                 </div>
               );
             })()}

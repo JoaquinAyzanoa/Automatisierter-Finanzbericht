@@ -78,6 +78,25 @@
   gap: 12px;
 }
 
+.informes__filtrar {
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.informes__filtrar:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 .informes__field {
   display: flex;
   align-items: center;
@@ -245,6 +264,46 @@
 
 .informes__otrosChevron.is-open {
   transform: rotate(90deg);
+}
+
+.informes__otrosBody {
+  padding: 12px;
+}
+
+.informes__otrosSearch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 320px;
+  margin-bottom: 12px;
+}
+
+.informes__filtroRow th {
+  padding: 4px 8px 8px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.informes__colFiltro {
+  width: 100%;
+  min-width: 90px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text);
+  background: var(--surface-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  outline: none;
+}
+
+.informes__colFiltro::placeholder {
+  color: #9aa4b3;
+}
+
+.informes__colFiltro:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--ring);
 }
 
 .informes__tabla tbody tr:hover td {
