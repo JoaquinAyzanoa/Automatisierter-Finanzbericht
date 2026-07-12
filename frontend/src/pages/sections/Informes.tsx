@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   ApiError,
@@ -122,11 +122,9 @@ export function Informes({ procesoId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [descargando, setDescargando] = useState(false);
   const [busqueda, setBusqueda] = useState("");
+  // Rango de fechas (para el botón Filtrar y para mostrar/guardar en el historial).
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFinal, setFechaFinal] = useState("");
-  // Rango aplicado (solo al pulsar "Filtrar").
-  const [fechaInicioApl, setFechaInicioApl] = useState("");
-  const [fechaFinalApl, setFechaFinalApl] = useState("");
   const [otrosOpen, setOtrosOpen] = useState(false);
   // Buscador, filtros por columna y rango de fechas, propios de "Otros".
   const [otrosBusqueda, setOtrosBusqueda] = useState("");
@@ -135,8 +133,8 @@ export function Informes({ procesoId }: Props) {
   );
   const [otrosFechaInicio, setOtrosFechaInicio] = useState("");
   const [otrosFechaFinal, setOtrosFechaFinal] = useState("");
-  // Reasignaciones manuales: id de fila -> posición de operación.
-  const [overrides, setOverrides] = useState<Record<number, number>>({});
+  // Reasignaciones: id de fila -> posición de operación, o null = "Otros".
+  const [overrides, setOverrides] = useState<Record<number, number | null>>({});
   // Autoguardado: contador de cambios del usuario + estado.
   const [cambios, setCambios] = useState(0);
   const [guardado, setGuardado] = useState<
@@ -164,9 +162,6 @@ export function Informes({ procesoId }: Props) {
         setOtrosFechaFinal("");
         setFechaInicio(d.fecha_inicio ?? "");
         setFechaFinal(d.fecha_final ?? "");
-        // El filtro NO se aplica al cargar; solo con el botón "Filtrar".
-        setFechaInicioApl("");
-        setFechaFinalApl("");
         setCambios(0);
         setGuardado("idle");
       })
@@ -222,24 +217,18 @@ export function Informes({ procesoId }: Props) {
     return op ? `${pos} - ${op.texto} - ${op.moneda}` : `Operación ${pos}`;
   }
 
+  // Categoría efectiva de una fila: override si existe, si no su __pos guardado.
+  function efectiva(f: FilaInforme): number | null {
+    const id = f["__id"] as number;
+    return id in overrides ? overrides[id] : (f["__pos"] as number | null);
+  }
+
   const { grupos, otros } = useMemo<{ grupos: Grupo[]; otros: FilaInforme[] }>(() => {
     if (!data) return { grupos: [], otros: [] };
     const q = busqueda.trim().toLowerCase();
-    const usaFecha = !!fecVctoCol && !!(fechaInicioApl || fechaFinalApl);
 
-    const enRango = (f: FilaInforme) => {
-      const fec = fecVctoCol ? fechaISO(f[fecVctoCol]) : "";
-      if (!fec) return false;
-      if (fechaInicioApl && fec < fechaInicioApl) return false;
-      if (fechaFinalApl && fec > fechaFinalApl) return false;
-      return true;
-    };
-
-    // Operaciones que NO respetan el filtro de fechas (sus filas nunca van a "Otros").
-    const noRespeta = new Map<number, boolean>();
-    for (const o of operaciones) noRespeta.set(o.pos, !o.respeta_filtro);
-
-    const dentro: FilaInforme[] = [];
+    // Se agrupa por la categoría guardada. eff == null => "Otros".
+    const mapa = new Map<number, FilaInforme[]>();
     const fuera: FilaInforme[] = [];
     for (const f of data.filas) {
       if (q) {
@@ -248,34 +237,27 @@ export function Informes({ procesoId }: Props) {
         );
         if (!match) continue;
       }
-      const id = f["__id"] as number;
-      const hasOverride = id in overrides;
-      const eff = hasOverride ? overrides[id] : (f["__pos"] as number | null);
-      const exenta = eff != null && noRespeta.get(eff) === true;
-      // Fuera del filtro va a "Otros", salvo que esté exenta o ya reasignada.
-      if (usaFecha && !exenta && !hasOverride && !enRango(f)) fuera.push(f);
-      else dentro.push(f);
-    }
-
-    const mapa = new Map<number | "sin", FilaInforme[]>();
-    for (const f of dentro) {
-      const id = f["__id"] as number;
-      const eff = id in overrides ? overrides[id] : (f["__pos"] as number | null);
-      const key = eff ?? "sin";
-      if (!mapa.has(key)) mapa.set(key, []);
-      mapa.get(key)!.push(f);
+      const eff = efectiva(f);
+      if (eff == null) {
+        fuera.push(f);
+      } else {
+        if (!mapa.has(eff)) mapa.set(eff, []);
+        mapa.get(eff)!.push(f);
+      }
     }
 
     const grupos = [...mapa.entries()]
-      .map(([key, filas]) => {
-        const pos = key === "sin" ? null : key;
-        return { pos, label: etiquetaGrupo(pos), filas, total: totalMonto(filas) };
-      })
-      .sort((a, b) => (a.pos ?? Infinity) - (b.pos ?? Infinity));
+      .map(([pos, filas]) => ({
+        pos,
+        label: etiquetaGrupo(pos),
+        filas,
+        total: totalMonto(filas),
+      }))
+      .sort((a, b) => a.pos - b.pos);
 
     return { grupos, otros: fuera };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, busqueda, fechaInicioApl, fechaFinalApl, overrides, opByPos, fecVctoCol]);
+  }, [data, busqueda, overrides, opByPos]);
 
   const otrosFiltrados = useMemo(() => {
     const q = otrosBusqueda.trim().toLowerCase();
@@ -310,17 +292,40 @@ export function Informes({ procesoId }: Props) {
     setCambios((c) => c + 1);
   }
 
+  // Filtrar: mueve a "Otros" (null) las filas cuya FEC. VCTO está fuera del rango.
+  // Respeta las categorías marcadas "No respetar filtro de fecha".
   function aplicarFiltro() {
-    setFechaInicioApl(fechaInicio);
-    setFechaFinalApl(fechaFinal);
+    if (!data) return;
+    const noRespeta = new Map<number, boolean>();
+    for (const o of operaciones) noRespeta.set(o.pos, !o.respeta_filtro);
+
+    setOverrides((prev) => {
+      const next: Record<number, number | null> = { ...prev };
+      for (const f of data.filas) {
+        const id = f["__id"] as number;
+        const eff = id in next ? next[id] : (f["__pos"] as number | null);
+        if (eff != null && noRespeta.get(eff) === true) continue; // exenta
+        const fec = fecVctoCol ? fechaISO(f[fecVctoCol]) : "";
+        const dentro =
+          !!fec &&
+          (!fechaInicio || fec >= fechaInicio) &&
+          (!fechaFinal || fec <= fechaFinal);
+        if (!dentro) next[id] = null; // fuera del rango -> "Otros"
+      }
+      return next;
+    });
     setCambios((c) => c + 1);
   }
 
-  // Autoguardado con debounce tras cada cambio del usuario.
+  // Autoguardado: debounce + flush al desmontar (para no perderlo al navegar).
+  const pendingRef = useRef(false);
+  const saveNowRef = useRef<() => void>(() => {});
+
   useEffect(() => {
-    if (cambios === 0 || !token || !data) return;
-    const id = data.id;
-    const t = setTimeout(() => {
+    saveNowRef.current = () => {
+      if (!token || !data || !pendingRef.current) return;
+      pendingRef.current = false;
+      const id = data.id;
       setGuardado("guardando");
       guardarProceso(token, id, {
         fecha_inicio: fechaInicio || null,
@@ -334,10 +339,20 @@ export function Informes({ procesoId }: Props) {
           );
         })
         .catch(() => setGuardado("error"));
-    }, 800);
+    };
+  });
+
+  useEffect(() => {
+    if (cambios === 0) return;
+    pendingRef.current = true;
+    const t = setTimeout(() => saveNowRef.current(), 800);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cambios]);
+
+  // Al desmontar (cambiar de sección/proceso) guarda lo que quede pendiente.
+  useEffect(() => {
+    return () => saveNowRef.current();
+  }, []);
 
   async function handleDescargar() {
     if (!token || !data) return;
@@ -364,11 +379,10 @@ export function Informes({ procesoId }: Props) {
     }
   }
 
-  function renderFila(f: FilaInforme, sinCategoria: boolean): ReactNode {
+  function renderFila(f: FilaInforme): ReactNode {
     const id = f["__id"] as number;
-    const eff = id in overrides ? overrides[id] : (f["__pos"] as number | null);
-    // En "Otros" la fila se muestra sin categoría (hasta que se asigne).
-    const valor = sinCategoria ? null : eff;
+    // Categoría efectiva; null => "Otros" (sin categoría).
+    const valor = efectiva(f);
     // Solo categorías del mismo ámbito (Nacional/Exterior) y, dentro, misma moneda.
     const rowMoneda = String(f["MONEDA"] ?? "").trim().toUpperCase();
     const rowAmbito = esRucNacional(f["RUC"]) ? "Nacional" : "Exterior";
@@ -393,7 +407,7 @@ export function Informes({ procesoId }: Props) {
     );
   }
 
-  function tabla(filas: FilaInforme[], sinCategoria = false): ReactNode {
+  function tabla(filas: FilaInforme[]): ReactNode {
     return (
       <TablaScroll topScroll={filas.length > 12}>
         <table className="informes__tabla">
@@ -405,7 +419,7 @@ export function Informes({ procesoId }: Props) {
               ))}
             </tr>
           </thead>
-          <tbody>{filas.map((f) => renderFila(f, sinCategoria))}</tbody>
+          <tbody>{filas.map((f) => renderFila(f))}</tbody>
         </table>
       </TablaScroll>
     );
@@ -473,7 +487,7 @@ export function Informes({ procesoId }: Props) {
                 ))}
               </tr>
             </thead>
-            <tbody>{filas.map((f) => renderFila(f, true))}</tbody>
+            <tbody>{filas.map((f) => renderFila(f))}</tbody>
           </table>
         </TablaScroll>
       </div>

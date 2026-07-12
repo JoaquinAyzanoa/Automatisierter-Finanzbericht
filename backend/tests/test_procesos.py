@@ -73,17 +73,22 @@ def test_flujo_proceso(client):
     assert latest["filas"][0]["__pos"] == 1  # nacional + SOL
     assert latest["filas"][1]["__pos"] == 2  # nacional + USD
 
-    # Autoguardado (sin descarga).
+    # Autoguardado (sin descarga): reasignar una y mover otra a "Otros" (null).
     g = client.post(
         f"/api/v1/procesos/{proceso_id}/guardar",
         headers=headers,
-        json={"fecha_inicio": "2026-02-01", "fecha_final": None, "overrides": {"1": 4}},
+        json={
+            "fecha_inicio": "2026-02-01",
+            "fecha_final": None,
+            "overrides": {"1": 4, "0": None},
+        },
     )
     assert g.status_code == 200
     assert "updated_at" in g.json()
     guardado = client.get(f"/api/v1/procesos/{proceso_id}", headers=headers).json()
     assert guardado["fecha_inicio"] == "2026-02-01"
     assert guardado["filas"][1]["__pos"] == 4
+    assert guardado["filas"][0]["__pos"] is None  # movida a "Otros"
 
     # Guardar (reasignar fila 0 -> op 3) + rango de fechas y descargar.
     dl = client.post(

@@ -80,7 +80,7 @@ class ProcesoService:
         proceso_id: str,
         fecha_inicio: str | None,
         fecha_final: str | None,
-        overrides: dict[str, int],
+        overrides: dict[str, int | None],
     ) -> Proceso:
         proceso = self.repo.get(proceso_id)
         if proceso is None:

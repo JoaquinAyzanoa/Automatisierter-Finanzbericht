@@ -21,5 +21,5 @@ class GuardarProceso(BaseModel):
 
     fecha_inicio: str | None = None
     fecha_final: str | None = None
-    # Reasignaciones manuales: id de fila (como texto) -> posición de operación.
-    overrides: dict[str, int] = {}
+    # id de fila (texto) -> posición de operación, o None para "Otros" (sin categoría).
+    overrides: dict[str, int | None] = {}

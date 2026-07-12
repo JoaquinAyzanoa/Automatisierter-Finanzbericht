@@ -348,7 +348,7 @@ export async function guardarProceso(
   body: {
     fecha_inicio: string | null;
     fecha_final: string | null;
-    overrides: Record<string, number>;
+    overrides: Record<string, number | null>;
   }
 ): Promise<{ id: string; updated_at: string }> {
   const res = await fetch(`${BASE}/procesos/${id}/guardar`, {
@@ -371,7 +371,7 @@ export async function guardarYDescargarProceso(
   body: {
     fecha_inicio: string | null;
     fecha_final: string | null;
-    overrides: Record<string, number>;
+    overrides: Record<string, number | null>;
   }
 ): Promise<Blob> {
   const res = await fetch(`${BASE}/procesos/${id}/descargar`, {
