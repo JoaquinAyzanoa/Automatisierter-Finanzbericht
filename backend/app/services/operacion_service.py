@@ -20,11 +20,16 @@ class OperacionService:
 
     def create(self, data: OperacionCreate) -> Operacion:
         return self.repo.create(
-            texto=data.texto, moneda=data.moneda, ambito=data.ambito
+            texto=data.texto,
+            moneda=data.moneda,
+            ambito=data.ambito,
+            tags=data.tags,
         )
 
     def replace_all(self, items: list[OperacionCreate]) -> list[Operacion]:
-        pairs = [(item.texto, item.moneda, item.ambito) for item in items]
+        pairs = [
+            (item.texto, item.moneda, item.ambito, item.tags) for item in items
+        ]
         return self.repo.replace_all(pairs)
 
     def update(self, operacion_id: int, data: OperacionUpdate) -> Operacion:
@@ -32,7 +37,11 @@ class OperacionService:
         if operacion is None:
             raise OperacionNotFoundError(f"Operacion {operacion_id} not found")
         return self.repo.update(
-            operacion, texto=data.texto, moneda=data.moneda, ambito=data.ambito
+            operacion,
+            texto=data.texto,
+            moneda=data.moneda,
+            ambito=data.ambito,
+            tags=data.tags,
         )
 
     def delete(self, operacion_id: int) -> None:

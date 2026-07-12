@@ -14,6 +14,7 @@ interface FilaOp {
   texto: string;
   moneda: Moneda;
   ambito: Ambito;
+  tags: string[];
 }
 
 const trashIcon = (
@@ -45,6 +46,7 @@ export function Configuracion() {
               texto: o.texto,
               moneda: o.moneda,
               ambito: o.ambito,
+              tags: o.tags ?? [],
             }))
           );
         }
@@ -68,7 +70,7 @@ export function Configuracion() {
   function agregar() {
     setOperaciones((prev) => [
       ...prev,
-      { id: tempId.current--, texto: "", moneda: "SOL", ambito: "Nacional" },
+      { id: tempId.current--, texto: "", moneda: "SOL", ambito: "Nacional", tags: [] },
     ]);
     markDirty();
   }
@@ -85,6 +87,28 @@ export function Configuracion() {
     markDirty();
   }
 
+  function agregarTag(id: number, raw: string) {
+    const tag = raw.trim();
+    if (!tag) return;
+    setOperaciones((prev) =>
+      prev.map((o) =>
+        o.id === id && !o.tags.includes(tag)
+          ? { ...o, tags: [...o.tags, tag] }
+          : o
+      )
+    );
+    markDirty();
+  }
+
+  function quitarTag(id: number, tag: string) {
+    setOperaciones((prev) =>
+      prev.map((o) =>
+        o.id === id ? { ...o, tags: o.tags.filter((t) => t !== tag) } : o
+      )
+    );
+    markDirty();
+  }
+
   async function guardar() {
     if (!token) return;
     setSaving(true);
@@ -94,6 +118,7 @@ export function Configuracion() {
         texto: o.texto,
         moneda: o.moneda,
         ambito: o.ambito,
+        tags: o.tags,
       }));
       const result = await reemplazarOperaciones(token, items);
       setOperaciones(
@@ -102,6 +127,7 @@ export function Configuracion() {
           texto: o.texto,
           moneda: o.moneda,
           ambito: o.ambito,
+          tags: o.tags ?? [],
         }))
       );
       setDirty(false);
@@ -179,6 +205,59 @@ export function Configuracion() {
                 >
                   {trashIcon}
                 </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="config__container">
+        <div className="config__containerHead">
+          <h3>Asignaciones especiales</h3>
+        </div>
+
+        {operaciones.length === 0 ? (
+          <p className="config__empty">
+            Primero crea operaciones para asignarles tags.
+          </p>
+        ) : (
+          <ul className="config__list">
+            {operaciones.map((op, index) => (
+              <li key={op.id} className="config__tagRow">
+                <span className="config__tagLabel">
+                  {index + 1} - {op.texto || "(sin nombre)"} - {op.moneda}
+                </span>
+                <div className="config__tags">
+                  {op.tags.map((tag) => (
+                    <span key={tag} className="config__tag">
+                      {tag}
+                      <button
+                        type="button"
+                        className="config__tagRemove"
+                        onClick={() => quitarTag(op.id, tag)}
+                        aria-label={`Quitar ${tag}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    type="text"
+                    className="config__tagInput"
+                    placeholder="+ tag"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        agregarTag(op.id, e.currentTarget.value);
+                        e.currentTarget.value = "";
+                      }
+                    }}
+                    onBlur={(e) => {
+                      agregarTag(op.id, e.currentTarget.value);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                </div>
               </li>
             ))}
           </ul>

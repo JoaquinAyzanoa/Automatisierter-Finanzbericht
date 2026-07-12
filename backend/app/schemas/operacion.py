@@ -11,12 +11,14 @@ class OperacionCreate(BaseModel):
     texto: str = Field(default="", max_length=255)
     moneda: Moneda = "SOL"
     ambito: Ambito = "Nacional"
+    tags: list[str] = []
 
 
 class OperacionUpdate(BaseModel):
     texto: str | None = Field(default=None, max_length=255)
     moneda: Moneda | None = None
     ambito: Ambito | None = None
+    tags: list[str] | None = None
 
 
 class OperacionRead(BaseModel):
@@ -26,4 +28,5 @@ class OperacionRead(BaseModel):
     texto: str
     moneda: Moneda
     ambito: Ambito
+    tags: list[str]
     created_at: datetime

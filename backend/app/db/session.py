@@ -53,6 +53,7 @@ def init_db() -> None:
     _ensure_column(
         "operaciones", "ambito", "VARCHAR(10) NOT NULL DEFAULT 'Nacional'"
     )
+    _ensure_column("operaciones", "tags", "TEXT NOT NULL DEFAULT '[]'")
 
 
 def get_session() -> Session:

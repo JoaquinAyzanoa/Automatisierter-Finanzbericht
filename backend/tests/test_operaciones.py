@@ -33,13 +33,19 @@ def test_crud_operaciones(client):
     resp = client.post(
         "/api/v1/operaciones",
         headers=headers,
-        json={"texto": "Compras locales", "moneda": "USD", "ambito": "Exterior"},
+        json={
+            "texto": "Compras locales",
+            "moneda": "USD",
+            "ambito": "Exterior",
+            "tags": ["flete", "aduana"],
+        },
     )
     assert resp.status_code == 201
     op = resp.json()
     assert op["texto"] == "Compras locales"
     assert op["moneda"] == "USD"
     assert op["ambito"] == "Exterior"
+    assert op["tags"] == ["flete", "aduana"]
     op_id = op["id"]
 
     # Listar.
@@ -75,7 +81,7 @@ def test_reemplazar_todas(client):
         "/api/v1/operaciones",
         headers=headers,
         json=[
-            {"texto": "A", "moneda": "SOL"},
+            {"texto": "A", "moneda": "SOL", "tags": ["x", "y"]},
             {"texto": "B", "moneda": "USD"},
         ],
     )
@@ -83,6 +89,8 @@ def test_reemplazar_todas(client):
     data = resp.json()
     assert [o["texto"] for o in data] == ["A", "B"]
     assert [o["moneda"] for o in data] == ["SOL", "USD"]
+    assert data[0]["tags"] == ["x", "y"]
+    assert data[1]["tags"] == []
 
     # Persistió.
     assert len(client.get("/api/v1/operaciones", headers=headers).json()) == 2

@@ -147,6 +147,7 @@ export interface Operacion {
   texto: string;
   moneda: Moneda;
   ambito: Ambito;
+  tags: string[];
   created_at: string;
 }
 
@@ -212,7 +213,7 @@ export async function eliminarOperacion(
 
 export async function reemplazarOperaciones(
   token: string,
-  items: { texto: string; moneda: Moneda; ambito: Ambito }[]
+  items: { texto: string; moneda: Moneda; ambito: Ambito; tags: string[] }[]
 ): Promise<Operacion[]> {
   const res = await fetch(`${BASE}/operaciones`, {
     method: "PUT",
