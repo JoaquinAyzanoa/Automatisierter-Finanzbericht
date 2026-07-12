@@ -36,6 +36,7 @@
 
 .panel {
   max-width: 900px;
+  margin: 0 auto;
   padding: 28px 32px;
   background: var(--surface);
   border: 1px solid var(--border);

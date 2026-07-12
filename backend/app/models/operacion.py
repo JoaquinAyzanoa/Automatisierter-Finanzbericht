@@ -12,6 +12,7 @@ class Operacion(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     texto: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     moneda: Mapped[str] = mapped_column(String(3), default="SOL", nullable=False)
+    ambito: Mapped[str] = mapped_column(String(10), default="Nacional", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )

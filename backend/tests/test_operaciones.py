@@ -33,12 +33,13 @@ def test_crud_operaciones(client):
     resp = client.post(
         "/api/v1/operaciones",
         headers=headers,
-        json={"texto": "Compras locales", "moneda": "USD"},
+        json={"texto": "Compras locales", "moneda": "USD", "ambito": "Exterior"},
     )
     assert resp.status_code == 201
     op = resp.json()
     assert op["texto"] == "Compras locales"
     assert op["moneda"] == "USD"
+    assert op["ambito"] == "Exterior"
     op_id = op["id"]
 
     # Listar.
@@ -49,11 +50,12 @@ def test_crud_operaciones(client):
     resp = client.put(
         f"/api/v1/operaciones/{op_id}",
         headers=headers,
-        json={"texto": "Compras nacionales", "moneda": "SOL"},
+        json={"texto": "Compras nacionales", "moneda": "SOL", "ambito": "Nacional"},
     )
     assert resp.status_code == 200
     assert resp.json()["texto"] == "Compras nacionales"
     assert resp.json()["moneda"] == "SOL"
+    assert resp.json()["ambito"] == "Nacional"
 
     # Eliminar.
     assert client.delete(f"/api/v1/operaciones/{op_id}", headers=headers).status_code == 204

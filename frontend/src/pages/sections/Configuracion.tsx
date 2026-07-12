@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   listarOperaciones,
   reemplazarOperaciones,
+  type Ambito,
   type Moneda,
 } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
@@ -12,6 +13,7 @@ interface FilaOp {
   id: number;
   texto: string;
   moneda: Moneda;
+  ambito: Ambito;
 }
 
 const trashIcon = (
@@ -37,7 +39,14 @@ export function Configuracion() {
     listarOperaciones(token)
       .then((ops) => {
         if (!cancelled) {
-          setOperaciones(ops.map((o) => ({ id: o.id, texto: o.texto, moneda: o.moneda })));
+          setOperaciones(
+            ops.map((o) => ({
+              id: o.id,
+              texto: o.texto,
+              moneda: o.moneda,
+              ambito: o.ambito,
+            }))
+          );
         }
       })
       .catch(() => {
@@ -59,7 +68,7 @@ export function Configuracion() {
   function agregar() {
     setOperaciones((prev) => [
       ...prev,
-      { id: tempId.current--, texto: "", moneda: "SOL" },
+      { id: tempId.current--, texto: "", moneda: "SOL", ambito: "Nacional" },
     ]);
     markDirty();
   }
@@ -81,10 +90,19 @@ export function Configuracion() {
     setSaving(true);
     setError(null);
     try {
-      const items = operaciones.map((o) => ({ texto: o.texto, moneda: o.moneda }));
+      const items = operaciones.map((o) => ({
+        texto: o.texto,
+        moneda: o.moneda,
+        ambito: o.ambito,
+      }));
       const result = await reemplazarOperaciones(token, items);
       setOperaciones(
-        result.map((o) => ({ id: o.id, texto: o.texto, moneda: o.moneda }))
+        result.map((o) => ({
+          id: o.id,
+          texto: o.texto,
+          moneda: o.moneda,
+          ambito: o.ambito,
+        }))
       );
       setDirty(false);
       setSaved(true);
@@ -140,6 +158,17 @@ export function Configuracion() {
                 >
                   <option value="SOL">SOL</option>
                   <option value="USD">USD</option>
+                </select>
+
+                <select
+                  className="config__select"
+                  value={op.ambito}
+                  onChange={(e) =>
+                    setLocal(op.id, { ambito: e.target.value as Ambito })
+                  }
+                >
+                  <option value="Nacional">Nacional</option>
+                  <option value="Exterior">Exterior</option>
                 </select>
 
                 <button

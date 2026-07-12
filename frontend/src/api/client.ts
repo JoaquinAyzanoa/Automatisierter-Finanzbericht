@@ -140,11 +140,13 @@ export async function descargarAvanceMerge(token: string): Promise<Blob> {
 }
 
 export type Moneda = "SOL" | "USD";
+export type Ambito = "Nacional" | "Exterior";
 
 export interface Operacion {
   id: number;
   texto: string;
   moneda: Moneda;
+  ambito: Ambito;
   created_at: string;
 }
 
@@ -160,7 +162,7 @@ export async function listarOperaciones(token: string): Promise<Operacion[]> {
 
 export async function crearOperacion(
   token: string,
-  data: { texto: string; moneda: Moneda }
+  data: { texto: string; moneda: Moneda; ambito: Ambito }
 ): Promise<Operacion> {
   const res = await fetch(`${BASE}/operaciones`, {
     method: "POST",
@@ -179,7 +181,7 @@ export async function crearOperacion(
 export async function actualizarOperacion(
   token: string,
   id: number,
-  data: { texto?: string; moneda?: Moneda }
+  data: { texto?: string; moneda?: Moneda; ambito?: Ambito }
 ): Promise<Operacion> {
   const res = await fetch(`${BASE}/operaciones/${id}`, {
     method: "PUT",
@@ -210,7 +212,7 @@ export async function eliminarOperacion(
 
 export async function reemplazarOperaciones(
   token: string,
-  items: { texto: string; moneda: Moneda }[]
+  items: { texto: string; moneda: Moneda; ambito: Ambito }[]
 ): Promise<Operacion[]> {
   const res = await fetch(`${BASE}/operaciones`, {
     method: "PUT",
@@ -224,6 +226,46 @@ export async function reemplazarOperaciones(
     throw new ApiError(res.status, await parseError(res));
   }
   return (await res.json()) as Operacion[];
+}
+
+export interface OperacionOpcion {
+  pos: number;
+  texto: string;
+  moneda: Moneda;
+  ambito: Ambito;
+}
+
+export type FilaInforme = Record<string, string | number | null>;
+
+export interface MergeClasificado {
+  columnas: string[];
+  filas: FilaInforme[];
+  operaciones: OperacionOpcion[];
+  fecha_columna: string | null;
+}
+
+export async function obtenerMergeClasificado(
+  token: string
+): Promise<MergeClasificado> {
+  const res = await fetch(`${BASE}/informes/merge`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as MergeClasificado;
+}
+
+export async function descargarInformeClasificado(
+  token: string
+): Promise<Blob> {
+  const res = await fetch(`${BASE}/informes/merge/descargar`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return await res.blob();
 }
 
 /** Dispara la descarga de un Blob en el navegador. */

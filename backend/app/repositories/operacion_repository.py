@@ -19,8 +19,8 @@ class OperacionRepository:
     def get(self, operacion_id: int) -> Operacion | None:
         return self.db.get(Operacion, operacion_id)
 
-    def create(self, texto: str, moneda: str) -> Operacion:
-        operacion = Operacion(texto=texto, moneda=moneda)
+    def create(self, texto: str, moneda: str, ambito: str) -> Operacion:
+        operacion = Operacion(texto=texto, moneda=moneda, ambito=ambito)
         self.db.add(operacion)
         self.db.commit()
         self.db.refresh(operacion)
@@ -31,11 +31,14 @@ class OperacionRepository:
         operacion: Operacion,
         texto: str | None = None,
         moneda: str | None = None,
+        ambito: str | None = None,
     ) -> Operacion:
         if texto is not None:
             operacion.texto = texto
         if moneda is not None:
             operacion.moneda = moneda
+        if ambito is not None:
+            operacion.ambito = ambito
         self.db.commit()
         self.db.refresh(operacion)
         return operacion
@@ -44,10 +47,10 @@ class OperacionRepository:
         self.db.delete(operacion)
         self.db.commit()
 
-    def replace_all(self, items: list[tuple[str, str]]) -> list[Operacion]:
+    def replace_all(self, items: list[tuple[str, str, str]]) -> list[Operacion]:
         """Reemplaza toda la lista de operaciones en una sola transacción."""
         self.db.execute(delete(Operacion))
-        for texto, moneda in items:
-            self.db.add(Operacion(texto=texto, moneda=moneda))
+        for texto, moneda, ambito in items:
+            self.db.add(Operacion(texto=texto, moneda=moneda, ambito=ambito))
         self.db.commit()
         return self.list()
