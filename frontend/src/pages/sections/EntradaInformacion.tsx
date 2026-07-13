@@ -36,7 +36,7 @@ const checkIcon = (
 );
 
 interface Props {
-  onProcesado?: () => void;
+  onProcesado?: (procesoId: string) => void;
 }
 
 export function EntradaInformacion({ onProcesado }: Props) {
@@ -46,7 +46,6 @@ export function EntradaInformacion({ onProcesado }: Props) {
     dolaresProveedores: null,
     solesProveedores: null,
   });
-  const [sharepoint, setSharepoint] = useState("");
   const [status, setStatus] = useState<Status>(null);
   const [processing, setProcessing] = useState(false);
 
@@ -57,8 +56,7 @@ export function EntradaInformacion({ onProcesado }: Props) {
   }
 
   const allFilesSelected = FILE_FIELDS.every((f) => files[f.key] !== null);
-  const canProcess =
-    allFilesSelected && sharepoint.trim().length > 0 && !processing;
+  const canProcess = allFilesSelected && !processing;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -69,7 +67,6 @@ export function EntradaInformacion({ onProcesado }: Props) {
     try {
       // 1) Reporteador (limpieza) 2) Proveedores (combinar USD/SOL)
       // 3) Merge (proveedores + reporteador por RUC y NUMERO).
-      // El Sharepoint del mes se integrará después.
       const reporteador = await procesarReporteador(token, files.reporteador!);
       const proveedores = await procesarProveedores(
         token,
@@ -79,7 +76,7 @@ export function EntradaInformacion({ onProcesado }: Props) {
       const merge = await procesarMerge(token);
       // Registrar el proceso en el historial (ID/hash + snapshot).
       const proceso = await crearProceso(token);
-      onProcesado?.();
+      onProcesado?.(proceso.id);
       setStatus({
         type: "ok",
         msg: `Procesado correctamente — Reporteador: ${reporteador.rows} · Proveedores: ${proveedores.rows} · Merge: ${merge.rows} filas. Proceso ${proceso.id}. Revísalo en «Informes».`,
@@ -101,8 +98,8 @@ export function EntradaInformacion({ onProcesado }: Props) {
   return (
     <section className="panel">
       <p className="panel__lead">
-        Carga los tres archivos de origen e indica el Sharepoint del mes para
-        generar el informe.
+        Carga los tres archivos de origen para generar el informe. Configura el
+        Sharepoint en «Configuración».
       </p>
 
       <form className="entrada" onSubmit={handleSubmit} noValidate>
@@ -133,20 +130,6 @@ export function EntradaInformacion({ onProcesado }: Props) {
               </div>
             );
           })}
-        </div>
-
-        <div className="entrada__field">
-          <label htmlFor="sharepoint">Sharepoint del mes</label>
-          <input
-            id="sharepoint"
-            type="text"
-            value={sharepoint}
-            onChange={(e) => {
-              setSharepoint(e.target.value);
-              setStatus(null);
-            }}
-            placeholder="https://… o nombre del sitio de Sharepoint"
-          />
         </div>
 
         {status && (

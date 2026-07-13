@@ -16,8 +16,15 @@ from pathlib import Path
 
 import openpyxl
 from openpyxl.formula.translate import Translator
+from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
+
+from app.services import sharepoint
+
+# Columna SUSTENTO / LINK FACTURA (donde va el hipervínculo al PDF).
+_COL_LINK = 19
+_LINK_FONT = Font(color="0563C1", underline="single")
 
 _PLANTILLA = Path(__file__).resolve().parent.parent / "resources" / "plantilla.xlsx"
 _DATETIME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})[ T]\d{2}:\d{2}:\d{2}")
@@ -95,7 +102,7 @@ def _detectar_operaciones(ws: Worksheet) -> dict:
     return secciones
 
 
-def _construir_detalle_sheet(wb, grupos, fecha_inicio, fecha_final) -> dict:
+def _construir_detalle_sheet(wb, grupos, fecha_inicio, fecha_final, sp_cfg) -> dict:
     src = wb["Detalle"]
     # max_column reporta 16384 por celdas con formato vacío; las columnas
     # reales del Detalle llegan hasta S (SUSTENTO / LINK FACTURA) = 19.
@@ -128,6 +135,20 @@ def _construir_detalle_sheet(wb, grupos, fecha_inicio, fecha_final) -> dict:
                         if s.has_style:
                             d._style = copy(s._style)
                         d.value = vals.get(c)
+                    # Hipervínculo al PDF en SUSTENTO (nombre del PDF = registro),
+                    # en la carpeta del mes que le toca según el registro. Si no
+                    # hay carpeta para ese mes, SUSTENTO queda en blanco.
+                    registro = str(vals.get(_COL_LINK) or "").strip()
+                    if sp_cfg and registro:
+                        url = sharepoint.link_factura(
+                            sp_cfg.get("link_principal"), sp_cfg.get("meses"), registro
+                        )
+                        if url:
+                            cel = dst.cell(dst_r, _COL_LINK)
+                            cel.hyperlink = url
+                            cel.font = _LINK_FONT
+                        else:
+                            dst.cell(dst_r, _COL_LINK).value = None
                     if alto:
                         dst.row_dimensions[dst_r].height = alto
                     dst_r += 1
@@ -205,6 +226,7 @@ def construir_detalle(
     fecha_inicio: str | None,
     fecha_final: str | None,
     output_path: Path,
+    sharepoint_cfg: dict | None = None,
 ) -> Path:
     wb = openpyxl.load_workbook(_PLANTILLA)
 
@@ -215,7 +237,9 @@ def construir_detalle(
             continue
         grupos.setdefault(pos, []).append(f)
 
-    total_rows = _construir_detalle_sheet(wb, grupos, fecha_inicio, fecha_final)
+    total_rows = _construir_detalle_sheet(
+        wb, grupos, fecha_inicio, fecha_final, sharepoint_cfg
+    )
     _rellenar_resumen(wb, total_rows)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

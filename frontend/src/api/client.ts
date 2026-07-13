@@ -277,6 +277,43 @@ export async function descargarInformeClasificado(
   return await res.blob();
 }
 
+// ---- Sharepoint -----------------------------------------------------------
+
+export interface SharepointConfig {
+  link_principal: string | null;
+  meses: Record<string, string>;
+}
+
+export async function obtenerSharepointConfig(
+  token: string
+): Promise<SharepointConfig> {
+  const res = await fetch(`${BASE}/sharepoint`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as SharepointConfig;
+}
+
+export async function guardarSharepointConfig(
+  token: string,
+  config: SharepointConfig
+): Promise<SharepointConfig> {
+  const res = await fetch(`${BASE}/sharepoint`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as SharepointConfig;
+}
+
 // ---- Procesos / Historial -------------------------------------------------
 
 export interface ProcesoResumen {

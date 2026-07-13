@@ -54,7 +54,7 @@ export function Dashboard() {
 
         <main className="app__main">
           {active === "entrada" ? (
-            <EntradaInformacion onProcesado={() => setProcesoId(null)} />
+            <EntradaInformacion onProcesado={verProceso} />
           ) : active === "informes" ? (
             <Informes procesoId={procesoId} />
           ) : active === "historial" ? (

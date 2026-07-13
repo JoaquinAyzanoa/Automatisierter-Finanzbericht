@@ -11,6 +11,7 @@ from app.models.proceso import Proceso
 from app.repositories.proceso_repository import ProcesoRepository
 from app.services import clasificacion_service, detalle_export, merge_service
 from app.services.excel_utils import ProcesamientoError
+from app.services.sharepoint_config_service import SharepointConfigService
 
 DESCARGA_FILENAME = "informe_clasificado.xlsx"
 
@@ -21,6 +22,7 @@ class ProcesoNotFoundError(Exception):
 
 class ProcesoService:
     def __init__(self, db: Session):
+        self.db = db
         self.repo = ProcesoRepository(db)
 
     # ---- Creación (al Procesar) --------------------------------------------
@@ -110,6 +112,11 @@ class ProcesoService:
         proceso = self.guardar(proceso_id, fecha_inicio, fecha_final, overrides)
         data = json.loads(proceso.payload)
         output_path = Path(settings.REPORTS_DIR) / DESCARGA_FILENAME
+        sharepoint_cfg = SharepointConfigService(self.db).as_dict()
         return detalle_export.construir_detalle(
-            data, proceso.fecha_inicio, proceso.fecha_final, output_path
+            data,
+            proceso.fecha_inicio,
+            proceso.fecha_final,
+            output_path,
+            sharepoint_cfg,
         )

@@ -1,13 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
+  guardarSharepointConfig,
   listarOperaciones,
+  obtenerSharepointConfig,
   reemplazarOperaciones,
   type Ambito,
   type Moneda,
 } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import "./Configuracion.css";
+
+const MESES: { n: string; nombre: string }[] = [
+  { n: "1", nombre: "Enero" },
+  { n: "2", nombre: "Febrero" },
+  { n: "3", nombre: "Marzo" },
+  { n: "4", nombre: "Abril" },
+  { n: "5", nombre: "Mayo" },
+  { n: "6", nombre: "Junio" },
+  { n: "7", nombre: "Julio" },
+  { n: "8", nombre: "Agosto" },
+  { n: "9", nombre: "Septiembre" },
+  { n: "10", nombre: "Octubre" },
+  { n: "11", nombre: "Noviembre" },
+  { n: "12", nombre: "Diciembre" },
+];
 
 interface FilaOp {
   id: number;
@@ -34,6 +51,13 @@ export function Configuracion() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const tempId = useRef(-1);
+
+  // ---- Sharepoint ----
+  const [spLink, setSpLink] = useState("");
+  const [spMeses, setSpMeses] = useState<Record<string, string>>({});
+  const [spSaving, setSpSaving] = useState(false);
+  const [spDirty, setSpDirty] = useState(false);
+  const [spSaved, setSpSaved] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -63,6 +87,50 @@ export function Configuracion() {
       cancelled = true;
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    obtenerSharepointConfig(token)
+      .then((cfg) => {
+        if (!cancelled) {
+          setSpLink(cfg.link_principal ?? "");
+          setSpMeses(cfg.meses ?? {});
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError("No se pudo cargar la configuración de Sharepoint.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  function setMes(n: string, valor: string) {
+    setSpMeses((prev) => ({ ...prev, [n]: valor }));
+    setSpDirty(true);
+    setSpSaved(false);
+  }
+
+  async function guardarSharepoint() {
+    if (!token) return;
+    setSpSaving(true);
+    setError(null);
+    try {
+      const cfg = await guardarSharepointConfig(token, {
+        link_principal: spLink.trim() || null,
+        meses: spMeses,
+      });
+      setSpLink(cfg.link_principal ?? "");
+      setSpMeses(cfg.meses ?? {});
+      setSpDirty(false);
+      setSpSaved(true);
+    } catch {
+      setError("No se pudo guardar la configuración de Sharepoint.");
+    } finally {
+      setSpSaving(false);
+    }
+  }
 
   function markDirty() {
     setDirty(true);
@@ -297,6 +365,65 @@ export function Configuracion() {
         >
           {saving ? "Guardando…" : "Guardar"}
         </button>
+      </div>
+
+      <div className="config__container">
+        <div className="config__containerHead">
+          <h3>Sharepoint</h3>
+        </div>
+
+        <div className="config__spBody">
+          <div className="config__spField">
+            <label htmlFor="sp-link">Link principal</label>
+            <input
+              id="sp-link"
+              type="text"
+              className="config__text"
+              placeholder="URL de la carpeta general (ej. …/2026/1. COMPRAS)"
+              value={spLink}
+              onChange={(e) => {
+                setSpLink(e.target.value);
+                setSpDirty(true);
+                setSpSaved(false);
+              }}
+            />
+          </div>
+
+          <p className="config__spHint">
+            Nombre de la carpeta de cada mes (tal como aparece en Sharepoint):
+          </p>
+          <div className="config__spMeses">
+            {MESES.map((m) => (
+              <div className="config__spMes" key={m.n}>
+                <label htmlFor={`sp-mes-${m.n}`}>
+                  {m.n} · {m.nombre}
+                </label>
+                <input
+                  id={`sp-mes-${m.n}`}
+                  type="text"
+                  className="config__text"
+                  placeholder={`${m.n}. ${m.nombre.toUpperCase()}`}
+                  value={spMeses[m.n] ?? ""}
+                  onChange={(e) => setMes(m.n, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="config__actions">
+          {spSaved && !spDirty && (
+            <span className="config__saved">Cambios guardados</span>
+          )}
+          <button
+            type="button"
+            className="config__save"
+            onClick={guardarSharepoint}
+            disabled={!spDirty || spSaving}
+          >
+            {spSaving ? "Guardando…" : "Guardar Sharepoint"}
+          </button>
+        </div>
       </div>
     </section>
   );
