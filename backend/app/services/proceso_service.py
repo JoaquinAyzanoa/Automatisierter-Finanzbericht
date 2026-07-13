@@ -10,6 +10,7 @@ from app.models.operacion import Operacion
 from app.models.proceso import Proceso
 from app.repositories.proceso_repository import ProcesoRepository
 from app.services import clasificacion_service, detalle_export, merge_service
+from app.services.agente_config_service import AgenteConfigService
 from app.services.excel_utils import ProcesamientoError
 from app.services.sharepoint_config_service import SharepointConfigService
 
@@ -121,10 +122,12 @@ class ProcesoService:
         data = json.loads(proceso.payload)
         output_path = Path(settings.REPORTS_DIR) / DESCARGA_FILENAME
         sharepoint_cfg = SharepointConfigService(self.db).as_dict()
+        agente_rucs = AgenteConfigService(self.db).as_list()
         return detalle_export.construir_detalle(
             data,
             proceso.fecha_inicio,
             proceso.fecha_final,
             output_path,
             sharepoint_cfg,
+            agente_rucs,
         )
