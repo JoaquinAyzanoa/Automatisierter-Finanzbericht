@@ -1,10 +1,11 @@
 """Clasificación del merge en categorías (operaciones).
 
-Reglas (por ahora):
+Reglas:
 - RUC nacional = 11 dígitos que empiezan con 10 o 20. Todo lo demás es EXTERIOR.
-- EXTERIOR                 -> Operación 6.
-- NACIONAL + SOL           -> Operación 1.
-- NACIONAL + USD           -> Operación 2.
+- Cada fila cae en la PRIMERA operación cuyo ámbito (Nacional/Exterior) y
+  moneda (SOL/USD) coinciden con los de la fila. Sin posiciones fijas: depende
+  de cómo estén configuradas las operaciones.
+- Los tags (ver `_posicion_por_tags`) prevalecen sobre esta regla por defecto.
 """
 
 import re
@@ -41,16 +42,18 @@ def es_ruc_nacional(ruc) -> bool:
     return len(r) == 11 and r.isdigit() and r[:2] in ("10", "20")
 
 
-def _posicion_objetivo(ruc, moneda) -> int | None:
-    """Posición (1-based) de la operación destino según las reglas por defecto."""
-    if es_ruc_nacional(ruc):
-        m = str(moneda).strip().upper()
-        if m == "SOL":
-            return 1
-        if m == "USD":
-            return 2
-        return None
-    return 6  # exterior
+def _posicion_objetivo(ruc, moneda, operaciones) -> int | None:
+    """Posición (1-based) de la primera operación cuyo ámbito y moneda
+    coinciden con la fila. Config-driven: no usa posiciones fijas."""
+    row_ambito = _ambito_fila(ruc)
+    row_moneda = str(moneda).strip().upper()
+    for i, op in enumerate(operaciones):
+        if str(op.ambito).strip() != row_ambito:
+            continue
+        if str(op.moneda).strip().upper() != row_moneda:
+            continue
+        return i + 1
+    return None
 
 
 def _ambito_fila(ruc) -> str:
@@ -120,7 +123,7 @@ def clasificar_dataframe(
     for _, row in df.iterrows():
         ruc = row[ruc_col] if ruc_col else ""
         moneda = row[moneda_col] if moneda_col else ""
-        pos = _posicion_objetivo(ruc, moneda)
+        pos = _posicion_objetivo(ruc, moneda, operaciones)
         op = by_pos.get(pos) if pos else None
         etiquetas.append(_etiqueta(pos, op) if op else SIN_CATEGORIA)
 
@@ -165,7 +168,7 @@ def clasificar_merge(path: Path, operaciones: list[Operacion]) -> dict:
         # Los tags prevalecen (respetando moneda/ámbito de la categoría).
         pos = _posicion_por_tags(contenido, row_moneda, row_ambito, operaciones)
         if pos is None:
-            pos = _posicion_objetivo(ruc, moneda)
+            pos = _posicion_objetivo(ruc, moneda, operaciones)
 
         rec["__pos"] = pos if (pos and pos <= n) else None
         if iso_list is not None:
