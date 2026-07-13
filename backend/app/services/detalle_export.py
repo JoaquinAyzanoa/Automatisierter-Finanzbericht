@@ -150,6 +150,8 @@ def _construir_detalle_sheet(
     # reales del Detalle llegan hasta S (SUSTENTO / LINK FACTURA) = 19.
     ncols = 19
     ops = _detectar_operaciones(src)
+    # Texto actual de cada operación (config de la app manda sobre la plantilla).
+    op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
 
     dst = wb.create_sheet("__detalle_tmp__")
     for letra, dim in src.column_dimensions.items():
@@ -198,6 +200,16 @@ def _construir_detalle_sheet(
                 _copiar_celda(src.cell(src_r, c), dst.cell(dst_r, c), src_r, dst_r, c)
             if src.row_dimensions[src_r].height:
                 dst.row_dimensions[dst_r].height = src.row_dimensions[src_r].height
+            # Si es un título "Operación N", re-rotularlo con el texto actual de
+            # la configuración (la plantilla puede tener nombres desactualizados).
+            a = src.cell(src_r, 1).value
+            m = _OPERACION_RE.match(str(a)) if a else None
+            if m:
+                pos = int(m.group(1))
+                texto = (op_texto.get(pos) or "").strip()
+                dst.cell(dst_r, 1).value = (
+                    f"Operación {pos}" + (f" - {texto}" if texto else "")
+                )
             row_map[src_r] = dst_r
             dst_r += 1
             src_r += 1
@@ -211,7 +223,6 @@ def _construir_detalle_sheet(
         modelo_ds = max(ops)                      # última operación de la plantilla
         m_total = ops[modelo_ds][1]
         m_titulo, m_header, m_data = modelo_ds - 2, modelo_ds - 1, modelo_ds
-        op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
         for pos in extra:
             filas = grupos[pos]
             dst_r += 1  # fila en blanco de separación
@@ -269,18 +280,24 @@ def _construir_detalle_sheet(
     return total_rows
 
 
-def _rellenar_resumen(wb, total_rows: dict) -> None:
+def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
     if "Resumen" not in wb.sheetnames:
         return
     ws = wb["Resumen"]
+    op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
     # En 'I. PAGOS A REALIZAR' cada fila tiene la etiqueta 'Operación N' en col B
     # y una fórmula en col D que apunta al TOTAL de esa operación en Detalle.
-    # Conservamos la fórmula, solo la re-apuntamos a la nueva fila TOTAL.
+    # Re-rotulamos la etiqueta con el nombre actual (la plantilla puede tenerlo
+    # desactualizado) y re-apuntamos la fórmula a la nueva fila TOTAL.
     for r in range(1, ws.max_row + 1):
         b = ws.cell(r, 2).value
         m = _OPERACION_RE.match(str(b)) if b else None
         if m:
             pos = int(m.group(1))
+            texto = (op_texto.get(pos) or "").strip()
+            ws.cell(r, 2).value = (
+                f"Operación {pos}" + (f" - {texto}" if texto else "")
+            )
             if pos in total_rows:
                 ws.cell(r, 4).value = f"=+Detalle!O{total_rows[pos]}"
 
@@ -305,7 +322,7 @@ def construir_detalle(
     total_rows = _construir_detalle_sheet(
         wb, grupos, operaciones, fecha_inicio, fecha_final, sharepoint_cfg
     )
-    _rellenar_resumen(wb, total_rows)
+    _rellenar_resumen(wb, total_rows, operaciones)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(output_path)
