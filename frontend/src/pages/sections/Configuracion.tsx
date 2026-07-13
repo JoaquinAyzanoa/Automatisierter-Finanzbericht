@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
+  guardarAgentesConfig,
   guardarSharepointConfig,
   listarOperaciones,
+  obtenerAgentesConfig,
   obtenerSharepointConfig,
   reemplazarOperaciones,
   type Ambito,
@@ -59,6 +61,12 @@ export function Configuracion() {
   const [spDirty, setSpDirty] = useState(false);
   const [spSaved, setSpSaved] = useState(false);
 
+  // ---- Agentes de aduana ----
+  const [agRucs, setAgRucs] = useState<string[]>([]);
+  const [agSaving, setAgSaving] = useState(false);
+  const [agDirty, setAgDirty] = useState(false);
+  const [agSaved, setAgSaved] = useState(false);
+
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
@@ -106,10 +114,61 @@ export function Configuracion() {
     };
   }, [token]);
 
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    obtenerAgentesConfig(token)
+      .then((cfg) => {
+        if (!cancelled) setAgRucs(cfg.rucs ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setError("No se pudo cargar la configuración de agentes.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
   function setMes(n: string, valor: string) {
     setSpMeses((prev) => ({ ...prev, [n]: valor }));
     setSpDirty(true);
     setSpSaved(false);
+  }
+
+  function setRuc(index: number, valor: string) {
+    setAgRucs((prev) => prev.map((r, i) => (i === index ? valor : r)));
+    setAgDirty(true);
+    setAgSaved(false);
+  }
+
+  function agregarRuc() {
+    setAgRucs((prev) => [...prev, ""]);
+    setAgDirty(true);
+    setAgSaved(false);
+  }
+
+  function quitarRuc(index: number) {
+    setAgRucs((prev) => prev.filter((_, i) => i !== index));
+    setAgDirty(true);
+    setAgSaved(false);
+  }
+
+  async function guardarAgentes() {
+    if (!token) return;
+    setAgSaving(true);
+    setError(null);
+    try {
+      const cfg = await guardarAgentesConfig(token, {
+        rucs: agRucs.map((r) => r.trim()).filter((r) => r),
+      });
+      setAgRucs(cfg.rucs ?? []);
+      setAgDirty(false);
+      setAgSaved(true);
+    } catch {
+      setError("No se pudo guardar la configuración de agentes.");
+    } finally {
+      setAgSaving(false);
+    }
   }
 
   async function guardarSharepoint() {
@@ -365,6 +424,64 @@ export function Configuracion() {
         >
           {saving ? "Guardando…" : "Guardar"}
         </button>
+      </div>
+
+      <div className="config__container">
+        <div className="config__containerHead">
+          <h3>Agentes de aduana</h3>
+          <button type="button" className="config__add" onClick={agregarRuc}>
+            + Agregar
+          </button>
+        </div>
+
+        <p className="config__spHint">
+          RUCs de los agentes aduaneros. Cuando las facturas de una misma Orden de
+          Compra (N° O/C-O/S) incluyen a uno de estos RUCs, el grupo completo se
+          consolida y se deposita al agente.
+        </p>
+
+        {agRucs.length === 0 ? (
+          <p className="config__empty">
+            No hay agentes. Usa «Agregar» para añadir un RUC.
+          </p>
+        ) : (
+          <ul className="config__list">
+            {agRucs.map((ruc, index) => (
+              <li key={index} className="config__row">
+                <span className="config__label">Agente {index + 1}</span>
+                <input
+                  type="text"
+                  className="config__text"
+                  placeholder="RUC del agente (11 dígitos)"
+                  value={ruc}
+                  onChange={(e) => setRuc(index, e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="config__delete"
+                  onClick={() => quitarRuc(index)}
+                  aria-label={`Eliminar Agente ${index + 1}`}
+                >
+                  {trashIcon}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="config__actions">
+          {agSaved && !agDirty && (
+            <span className="config__saved">Cambios guardados</span>
+          )}
+          <button
+            type="button"
+            className="config__save"
+            onClick={guardarAgentes}
+            disabled={!agDirty || agSaving}
+          >
+            {agSaving ? "Guardando…" : "Guardar agentes"}
+          </button>
+        </div>
       </div>
 
       <div className="config__container">

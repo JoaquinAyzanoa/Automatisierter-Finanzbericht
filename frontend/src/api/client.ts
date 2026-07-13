@@ -314,6 +314,42 @@ export async function guardarSharepointConfig(
   return (await res.json()) as SharepointConfig;
 }
 
+// ---- Agentes de aduana ----------------------------------------------------
+
+export interface AgentesConfig {
+  rucs: string[];
+}
+
+export async function obtenerAgentesConfig(
+  token: string
+): Promise<AgentesConfig> {
+  const res = await fetch(`${BASE}/agentes`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as AgentesConfig;
+}
+
+export async function guardarAgentesConfig(
+  token: string,
+  config: AgentesConfig
+): Promise<AgentesConfig> {
+  const res = await fetch(`${BASE}/agentes`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as AgentesConfig;
+}
+
 // ---- Procesos / Historial -------------------------------------------------
 
 export interface ProcesoResumen {
