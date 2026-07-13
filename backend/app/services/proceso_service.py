@@ -75,6 +75,14 @@ class ProcesoService:
     def list(self) -> list[Proceso]:
         return self.repo.list()
 
+    def renombrar(self, proceso_id: str, nombre: str | None) -> Proceso:
+        proceso = self.repo.get(proceso_id)
+        if proceso is None:
+            raise ProcesoNotFoundError(proceso_id)
+        limpio = (nombre or "").strip()
+        proceso.nombre = limpio or None
+        return self.repo.save(proceso)
+
     # ---- Guardar (autoguardado) --------------------------------------------
     def guardar(
         self,

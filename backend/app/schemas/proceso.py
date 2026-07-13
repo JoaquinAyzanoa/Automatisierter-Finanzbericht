@@ -9,11 +9,18 @@ class ProcesoResumen(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    nombre: str | None
     created_at: datetime
     updated_at: datetime
     fecha_inicio: str | None
     fecha_final: str | None
     n_filas: int
+
+
+class RenombrarProceso(BaseModel):
+    """Nombre editable del proceso en el Historial."""
+
+    nombre: str | None = None
 
 
 class GuardarProceso(BaseModel):

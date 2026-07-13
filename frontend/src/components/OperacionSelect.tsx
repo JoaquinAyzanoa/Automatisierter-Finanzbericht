@@ -7,7 +7,7 @@ import "./OperacionSelect.css";
 interface Props {
   value: number | null;
   options: OperacionOpcion[];
-  onChange: (pos: number) => void;
+  onChange: (pos: number | null) => void;
 }
 
 const chevron = (
@@ -87,6 +87,22 @@ export function OperacionSelect({ value, options, onChange }: Props) {
                   </button>
                 </li>
               ))}
+              <li className="opsel__sep" role="separator" />
+              <li>
+                <button
+                  type="button"
+                  className={
+                    "opsel__item" + (value === null ? " is-active" : "")
+                  }
+                  onClick={() => {
+                    onChange(null);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="opsel__num">–</span>
+                  <span className="opsel__texto">Otros (fuera del filtro)</span>
+                </button>
+              </li>
             </ul>
           </>,
           document.body

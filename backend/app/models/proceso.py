@@ -12,6 +12,8 @@ class Proceso(Base):
     __tablename__ = "procesos"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    # Nombre editable que el usuario le pone al proceso en el Historial.
+    nombre: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )

@@ -287,7 +287,7 @@ export function Informes({ procesoId }: Props) {
     });
   }, [otros, otrosBusqueda, otrosColFiltros, otrosFechaInicio, otrosFechaFinal, fecVctoCol]);
 
-  function reasignar(id: number, pos: number) {
+  function reasignar(id: number, pos: number | null) {
     setOverrides((prev) => ({ ...prev, [id]: pos }));
     setCambios((c) => c + 1);
   }

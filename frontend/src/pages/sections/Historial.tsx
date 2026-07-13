@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import {
   listarProcesos,
+  renombrarProceso,
   type ProcesoResumen,
 } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
@@ -47,6 +48,22 @@ export function Historial({ onVer }: Props) {
     };
   }, [token]);
 
+  function setNombreLocal(id: string, nombre: string) {
+    setProcesos((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, nombre } : p))
+    );
+  }
+
+  async function guardarNombre(p: ProcesoResumen) {
+    if (!token) return;
+    const nombre = (p.nombre ?? "").trim();
+    try {
+      await renombrarProceso(token, p.id, nombre);
+    } catch {
+      setError("No se pudo guardar el nombre.");
+    }
+  }
+
   return (
     <section className="panel">
       <p className="panel__lead">
@@ -67,6 +84,7 @@ export function Historial({ onVer }: Props) {
             <thead>
               <tr>
                 <th>Proceso</th>
+                <th>Nombre</th>
                 <th>Última edición</th>
                 <th>Rango de fechas</th>
                 <th className="historial__num">Filas</th>
@@ -77,6 +95,19 @@ export function Historial({ onVer }: Props) {
               {procesos.map((p) => (
                 <tr key={p.id}>
                   <td className="historial__id">{p.id}</td>
+                  <td>
+                    <input
+                      type="text"
+                      className="historial__nombre"
+                      placeholder="Sin nombre"
+                      value={p.nombre ?? ""}
+                      onChange={(e) => setNombreLocal(p.id, e.target.value)}
+                      onBlur={() => guardarNombre(p)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                      }}
+                    />
+                  </td>
                   <td>{formatoFechaHora(p.updated_at)}</td>
                   <td>{rangoFechas(p)}</td>
                   <td className="historial__num">{p.n_filas}</td>

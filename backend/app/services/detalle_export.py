@@ -26,6 +26,10 @@ from app.services import sharepoint
 _COL_LINK = 19
 _LINK_FONT = Font(color="0563C1", underline="single")
 
+# Columna DET (12): formato contable con 2 decimales (cero -> guion).
+_COL_DET = 12
+_DET_FMT = "_-* #,##0.00_-;\\-* #,##0.00_-;_-* \\-??_-;_-@_-"
+
 _PLANTILLA = Path(__file__).resolve().parent.parent / "resources" / "plantilla.xlsx"
 _DATETIME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})[ T]\d{2}:\d{2}:\d{2}")
 _OPERACION_RE = re.compile(r"^\s*Operaci.n\s+(\d+)", re.IGNORECASE)
@@ -59,12 +63,11 @@ def _valores_fila(f: dict) -> dict:
     saldo = round(_num(f.get("SALDO")), 2)
     p_det = _num(f.get("DETRACCION"))
     det = round(importe * p_det / 100, 2)
-    ret = round(_num(f.get("RETENCION")), 2)  # sin fuente aún: 0 (columna en blanco)
-    neto = round(saldo - det - ret, 2)
     vals = {i: (_fecha(f.get(k)) if i in _FECHA_COLS else f.get(k, "")) for i, k in _TXT.items()}
     # %DET va en una celda con formato de porcentaje: guardar como fracción
     # (12 -> 0.12) para que Excel muestre "12 %", no "1200 %".
-    vals.update({7: importe, 8: pagado, 9: saldo, 11: p_det / 100, 12: det, 15: neto})
+    # RET y Neto se escriben como fórmulas de Excel (ver _construir_detalle_sheet).
+    vals.update({7: importe, 8: pagado, 9: saldo, 11: p_det / 100, 12: det})
     return vals
 
 
@@ -102,7 +105,46 @@ def _detectar_operaciones(ws: Worksheet) -> dict:
     return secciones
 
 
-def _construir_detalle_sheet(wb, grupos, fecha_inicio, fecha_final, sp_cfg) -> dict:
+def _escribir_fila(src, estilo_row, dst, r, fila, ncols, sp_cfg) -> None:
+    """Escribe una fila de datos en `r`, con el estilo de `estilo_row`."""
+    vals = _valores_fila(fila)
+    for c in range(1, ncols + 1):
+        s = src.cell(estilo_row, c)
+        d = dst.cell(r, c)
+        if s.has_style:
+            d._style = copy(s._style)
+        d.value = vals.get(c)
+    # DET con dos decimales.
+    dst.cell(r, _COL_DET).number_format = _DET_FMT
+    # %RET como porcentaje (mismo formato que %DET); RET = %RET * IMPORTE.
+    dst.cell(r, 13).number_format = dst.cell(r, 11).number_format
+    dst.cell(r, 14).value = f"=M{r}*G{r}"
+    # Neto (fórmula viva):
+    #   si DET>0 y |PAGADO-DET|<1  -> SALDO
+    #   si DET>0 y PAGADO=0        -> SALDO-DET
+    #   en otro caso               -> SALDO   ; luego - RET
+    dst.cell(r, 15).value = (
+        f"=IF(AND(L{r}>0,ABS(H{r}-L{r})<1),I{r},"
+        f"IF(AND(L{r}>0,H{r}=0),I{r}-L{r},I{r}))-N{r}"
+    )
+    # Hipervínculo al PDF en SUSTENTO (nombre del PDF = registro), en la carpeta
+    # del mes que le toca. Si no hay carpeta para ese mes, queda en blanco.
+    registro = str(vals.get(_COL_LINK) or "").strip()
+    if sp_cfg and registro:
+        url = sharepoint.link_factura(
+            sp_cfg.get("link_principal"), sp_cfg.get("meses"), registro
+        )
+        if url:
+            cel = dst.cell(r, _COL_LINK)
+            cel.hyperlink = url
+            cel.font = _LINK_FONT
+        else:
+            dst.cell(r, _COL_LINK).value = None
+
+
+def _construir_detalle_sheet(
+    wb, grupos, operaciones, fecha_inicio, fecha_final, sp_cfg
+) -> dict:
     src = wb["Detalle"]
     # max_column reporta 16384 por celdas con formato vacío; las columnas
     # reales del Detalle llegan hasta S (SUSTENTO / LINK FACTURA) = 19.
@@ -128,27 +170,7 @@ def _construir_detalle_sheet(wb, grupos, fecha_inicio, fecha_final, sp_cfg) -> d
             if filas:
                 alto = src.row_dimensions[estilo_row].height
                 for f in filas:
-                    vals = _valores_fila(f)
-                    for c in range(1, ncols + 1):
-                        s = src.cell(estilo_row, c)
-                        d = dst.cell(dst_r, c)
-                        if s.has_style:
-                            d._style = copy(s._style)
-                        d.value = vals.get(c)
-                    # Hipervínculo al PDF en SUSTENTO (nombre del PDF = registro),
-                    # en la carpeta del mes que le toca según el registro. Si no
-                    # hay carpeta para ese mes, SUSTENTO queda en blanco.
-                    registro = str(vals.get(_COL_LINK) or "").strip()
-                    if sp_cfg and registro:
-                        url = sharepoint.link_factura(
-                            sp_cfg.get("link_principal"), sp_cfg.get("meses"), registro
-                        )
-                        if url:
-                            cel = dst.cell(dst_r, _COL_LINK)
-                            cel.hyperlink = url
-                            cel.font = _LINK_FONT
-                        else:
-                            dst.cell(dst_r, _COL_LINK).value = None
+                    _escribir_fila(src, estilo_row, dst, dst_r, f, ncols, sp_cfg)
                     if alto:
                         dst.row_dimensions[dst_r].height = alto
                     dst_r += 1
@@ -179,6 +201,48 @@ def _construir_detalle_sheet(wb, grupos, fecha_inicio, fecha_final, sp_cfg) -> d
             row_map[src_r] = dst_r
             dst_r += 1
             src_r += 1
+
+    # Operaciones que existen en los datos pero no en la plantilla (p. ej. una
+    # 9ª categoría creada en Configuración): se agregan como secciones nuevas al
+    # final, copiando el estilo de la última operación de la plantilla.
+    plantilla_pos = {p for (p, _tr) in ops.values()}
+    extra = sorted(p for p in grupos if p not in plantilla_pos)
+    if extra:
+        modelo_ds = max(ops)                      # última operación de la plantilla
+        m_total = ops[modelo_ds][1]
+        m_titulo, m_header, m_data = modelo_ds - 2, modelo_ds - 1, modelo_ds
+        op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
+        for pos in extra:
+            filas = grupos[pos]
+            dst_r += 1  # fila en blanco de separación
+            # Título.
+            for c in range(1, ncols + 1):
+                _copiar_celda(src.cell(m_titulo, c), dst.cell(dst_r, c), m_titulo, dst_r, c)
+            texto = (op_texto.get(pos) or "").strip()
+            dst.cell(dst_r, 1).value = f"Operación {pos}" + (f" - {texto}" if texto else "")
+            dst_r += 1
+            # Cabecera.
+            for c in range(1, ncols + 1):
+                _copiar_celda(src.cell(m_header, c), dst.cell(dst_r, c), m_header, dst_r, c)
+            dst_r += 1
+            # Datos.
+            data_ini = dst_r
+            alto = src.row_dimensions[m_data].height
+            for f in filas:
+                _escribir_fila(src, m_data, dst, dst_r, f, ncols, sp_cfg)
+                if alto:
+                    dst.row_dimensions[dst_r].height = alto
+                dst_r += 1
+            data_fin = dst_r - 1
+            # TOTAL.
+            for c in range(1, ncols + 1):
+                _copiar_celda(src.cell(m_total, c), dst.cell(dst_r, c), m_total, dst_r, c)
+            if src.row_dimensions[m_total].height:
+                dst.row_dimensions[dst_r].height = src.row_dimensions[m_total].height
+            dst.cell(dst_r, 15).value = f"=SUM(O{data_ini}:O{data_fin})"
+            dst.merge_cells(start_row=dst_r, start_column=1, end_row=dst_r, end_column=14)
+            total_rows[pos] = dst_r
+            dst_r += 1
 
     # Merges verbatim (de filas copiadas tal cual).
     for mc in list(src.merged_cells.ranges):
@@ -237,8 +301,9 @@ def construir_detalle(
             continue
         grupos.setdefault(pos, []).append(f)
 
+    operaciones = data.get("operaciones", [])
     total_rows = _construir_detalle_sheet(
-        wb, grupos, fecha_inicio, fecha_final, sharepoint_cfg
+        wb, grupos, operaciones, fecha_inicio, fecha_final, sharepoint_cfg
     )
     _rellenar_resumen(wb, total_rows)
 

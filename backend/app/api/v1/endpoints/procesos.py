@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 
 from app.api.deps import CurrentUser, DbSession
-from app.schemas.proceso import GuardarProceso, ProcesoResumen
+from app.schemas.proceso import GuardarProceso, ProcesoResumen, RenombrarProceso
 from app.services.excel_utils import ProcesamientoError
 from app.services.operacion_service import OperacionService
 from app.services.proceso_service import ProcesoNotFoundError, ProcesoService
@@ -49,6 +49,22 @@ def obtener(proceso_id: str, current_user: CurrentUser, db: DbSession) -> dict:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Proceso no encontrado"
         )
+
+
+@router.post("/{proceso_id}/nombre")
+def renombrar(
+    proceso_id: str,
+    payload: RenombrarProceso,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> dict:
+    try:
+        proceso = ProcesoService(db).renombrar(proceso_id, payload.nombre)
+    except ProcesoNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Proceso no encontrado"
+        )
+    return {"id": proceso.id, "nombre": proceso.nombre}
 
 
 @router.post("/{proceso_id}/guardar")

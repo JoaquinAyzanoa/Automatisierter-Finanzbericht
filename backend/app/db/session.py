@@ -58,6 +58,7 @@ def init_db() -> None:
     _ensure_column(
         "operaciones", "respeta_filtro", "BOOLEAN NOT NULL DEFAULT 1"
     )
+    _ensure_column("procesos", "nombre", "TEXT")
 
 
 def get_session() -> Session:

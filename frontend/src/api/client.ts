@@ -318,11 +318,31 @@ export async function guardarSharepointConfig(
 
 export interface ProcesoResumen {
   id: string;
+  nombre: string | null;
   created_at: string;
   updated_at: string;
   fecha_inicio: string | null;
   fecha_final: string | null;
   n_filas: number;
+}
+
+export async function renombrarProceso(
+  token: string,
+  id: string,
+  nombre: string
+): Promise<{ id: string; nombre: string | null }> {
+  const res = await fetch(`${BASE}/procesos/${id}/nombre`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ nombre }),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as { id: string; nombre: string | null };
 }
 
 export interface ProcesoDetalle extends MergeClasificado {
