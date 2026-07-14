@@ -44,6 +44,13 @@ _PLANTILLA = Path(__file__).resolve().parent.parent / "resources" / "plantilla.x
 _DATETIME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})[ T]\d{2}:\d{2}:\d{2}")
 _OPERACION_RE = re.compile(r"^\s*Operaci.n\s+(\d+)", re.IGNORECASE)
 
+# Aseguradoras con las que se trabaja hoy (sección 'PAGOS SEGUROS'). La
+# plantilla trae una lista más larga; aquí se reemplaza por estas filas.
+_SEGUROS_PROVEEDORES = [
+    "RIMAC S.A. ENTIDAD PRESTADORA DE SALUD",
+    "RIMAC SEGUROS Y REASEGUROS",
+]
+
 # Detalle (SALIDA): columna (1-based) -> clave de texto en los datos.
 _TXT = {
     1: "PROVEEDOR", 2: "RUC", 3: "TIPO", 4: "NUMERO",
@@ -234,6 +241,28 @@ def _detectar_agentes(ws: Worksheet) -> dict:
     return secciones
 
 
+_SEGUROS_RE = re.compile(r"PAGOS\s+SEGUROS", re.IGNORECASE)
+
+
+def _detectar_seguros(ws: Worksheet) -> dict:
+    """data_start_row -> total_row para la sección 'PAGOS SEGUROS'."""
+    secciones: dict = {}
+    r = 1
+    while r <= ws.max_row:
+        a = ws.cell(r, 1).value
+        m = _SEGUROS_RE.search(str(a)) if a else None
+        if m:
+            header_row = r + 1
+            tr = header_row + 1
+            while tr <= ws.max_row and str(ws.cell(tr, 1).value).strip().upper() != "TOTAL":
+                tr += 1
+            secciones[header_row + 1] = tr
+            r = tr + 1
+        else:
+            r += 1
+    return secciones
+
+
 def _escribir_resumen_agente(src, estilo_row, dst, r, nombre, ruc, oc, total, ncols_src):
     """Fila resumen de la sección Agentes: nombre, RUC y O/C del agente y el
     total (Neto) a depositar. Toma el estilo (desplazado) de la fila modelo."""
@@ -293,6 +322,7 @@ def _construir_detalle_sheet(
     ncols = 19
     ops = _detectar_operaciones(src)
     agentes = _detectar_agentes(src)
+    seguros = _detectar_seguros(src)
     grupos_agentes = grupos_agentes or {}
     nombre_por_oc = nombre_por_oc or {}
     ruc_por_oc = ruc_por_oc or {}
@@ -372,6 +402,25 @@ def _construir_detalle_sheet(
                 dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
             if resumen:
                 dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{data_fin})"
+            total_merges.append(dst_r)
+            dst_r += 1
+            src_r = total_row + 1
+        elif src_r in seguros:
+            # Sección 'PAGOS SEGUROS': se emiten solo las aseguradoras vigentes
+            # (la plantilla trae una lista más larga), con el estilo de la fila
+            # modelo, y luego la fila TOTAL.
+            total_row = seguros[src_r]
+            estilo_row = src_r
+            alto = src.row_dimensions[estilo_row].height
+            for nombre in _SEGUROS_PROVEEDORES:
+                _copiar_fila_desplazada(src, dst, estilo_row, dst_r, ncols)
+                dst.cell(dst_r, 1).value = nombre
+                if alto:
+                    dst.row_dimensions[dst_r].height = alto
+                dst_r += 1
+            _copiar_fila_desplazada(src, dst, total_row, dst_r, ncols)
+            if src.row_dimensions[total_row].height:
+                dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
             total_merges.append(dst_r)
             dst_r += 1
             src_r = total_row + 1
