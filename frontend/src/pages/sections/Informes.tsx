@@ -145,9 +145,11 @@ export function Informes({ procesoId }: Props) {
   const [guardado, setGuardado] = useState<
     "idle" | "guardando" | "guardado" | "error"
   >("idle");
-  // RUCs de agentes de aduana (config). Las facturas de una O/C con agente se
-  // muestran en su propia sección (igual que en la descarga), no en su operación.
+  // RUCs de agentes de aduana y de proveedores relacionados (config). Las
+  // facturas de una O/C con agente/relacionado se muestran en su propia sección
+  // (igual que en la descarga), no en su operación.
   const [agenteRucs, setAgenteRucs] = useState<string[]>([]);
+  const [agenteRelacionados, setAgenteRelacionados] = useState<string[]>([]);
 
   useEffect(() => {
     if (!token) return;
@@ -197,7 +199,10 @@ export function Informes({ procesoId }: Props) {
     let cancelled = false;
     obtenerAgentesConfig(token)
       .then((cfg) => {
-        if (!cancelled) setAgenteRucs(cfg.rucs ?? []);
+        if (!cancelled) {
+          setAgenteRucs(cfg.rucs ?? []);
+          setAgenteRelacionados(cfg.relacionados ?? []);
+        }
       })
       .catch(() => {
         /* si falla, no se separan agentes; no es bloqueante */
@@ -209,22 +214,33 @@ export function Informes({ procesoId }: Props) {
 
   const operaciones = data?.operaciones ?? [];
 
-  // O/C que incluyen a un agente aduanero (por RUC configurado) y el nombre del
-  // agente por O/C. Mismo criterio que la descarga (detalle_export).
+  // O/C que incluyen a un agente o proveedor relacionado (por RUC configurado)
+  // y el nombre del agente por O/C. Mismo criterio que la descarga
+  // (detalle_export): si no hay un agente real, se marca para llenar a mano.
   const { ocsAgente, nombreAgentePorOc } = useMemo(() => {
-    const rucs = new Set(agenteRucs.map(normRuc).filter(Boolean));
+    const agentes = new Set(agenteRucs.map(normRuc).filter(Boolean));
+    const relacionados = new Set(agenteRelacionados.map(normRuc).filter(Boolean));
+    const disparadores = new Set([...agentes, ...relacionados]);
     const nombre = new Map<string, string>();
-    if (rucs.size === 0 || !data) {
+    if (disparadores.size === 0 || !data) {
       return { ocsAgente: new Set<string>(), nombreAgentePorOc: nombre };
     }
+    const ocs = new Set<string>();
     for (const f of data.filas) {
       const oc = String(f["ORD_COMPRA"] ?? "").trim();
-      if (oc && rucs.has(normRuc(f["RUC"])) && !nombre.has(oc)) {
+      if (!oc) continue;
+      const ruc = normRuc(f["RUC"]);
+      if (disparadores.has(ruc)) ocs.add(oc);
+      // El agente real tiene prioridad para nombrar la O/C.
+      if (agentes.has(ruc) && !nombre.has(oc)) {
         nombre.set(oc, String(f["PROVEEDOR"] ?? "").trim());
       }
     }
-    return { ocsAgente: new Set(nombre.keys()), nombreAgentePorOc: nombre };
-  }, [data, agenteRucs]);
+    for (const oc of ocs) {
+      if (!nombre.has(oc)) nombre.set(oc, "Colocar nombre de agente manualmente");
+    }
+    return { ocsAgente: ocs, nombreAgentePorOc: nombre };
+  }, [data, agenteRucs, agenteRelacionados]);
 
   // Reordena las columnas: MONEDA, PROVEEDOR, PRODUCTO primero; el resto después.
   const columnas = useMemo(() => {

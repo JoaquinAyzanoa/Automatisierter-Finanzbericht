@@ -318,6 +318,7 @@ export async function guardarSharepointConfig(
 
 export interface AgentesConfig {
   rucs: string[];
+  relacionados: string[];
 }
 
 export async function obtenerAgentesConfig(

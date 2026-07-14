@@ -117,29 +117,49 @@ def _neto(f: dict) -> float:
     return round(base, 2)
 
 
-def _agrupar_agentes(filas: list[dict], agente_rucs: list[str]) -> tuple:
-    """Detecta las O/C que incluyen a un agente aduanero y agrupa sus facturas.
+# Marcador cuando la O/C se consolida por un proveedor relacionado pero no hay
+# una factura del agente en los datos (el usuario pone el nombre a mano).
+_AGENTE_MANUAL = "Colocar nombre de agente manualmente"
+
+
+def _agrupar_agentes(
+    filas: list[dict], agente_rucs: list[str], relacionados_rucs: list[str] = None
+) -> tuple:
+    """Detecta las O/C que incluyen a un agente o a un proveedor relacionado y
+    agrupa TODAS sus facturas.
 
     Devuelve:
-      - ocs_agente: set de N° O/C-O/S que tienen un agente.
-      - nombre_por_oc: O/C -> nombre del proveedor-agente.
-      - ruc_por_oc: O/C -> RUC del proveedor-agente.
+      - ocs_agente: set de N° O/C-O/S consolidadas.
+      - nombre_por_oc: O/C -> nombre del agente (o marcador si no hay agente real).
+      - ruc_por_oc: O/C -> RUC del agente ("" si no hay agente real).
       - grupos: (O/C, MONEDA) -> lista de filas de esa orden y moneda.
     """
-    rucs = {_norm_ruc(r) for r in (agente_rucs or []) if str(r).strip()}
-    if not rucs:
+    agentes = {_norm_ruc(r) for r in (agente_rucs or []) if str(r).strip()}
+    relacionados = {_norm_ruc(r) for r in (relacionados_rucs or []) if str(r).strip()}
+    disparadores = agentes | relacionados
+    if not disparadores:
         return set(), {}, {}, {}
 
     nombre_por_oc: dict[str, str] = {}
     ruc_por_oc: dict[str, str] = {}
+    ocs_agente: set[str] = set()
     for f in filas:
         oc = str(f.get("ORD_COMPRA", "")).strip()
+        if not oc:
+            continue
         ruc = _norm_ruc(f.get("RUC", ""))
-        if oc and ruc in rucs and oc not in nombre_por_oc:
+        if ruc in disparadores:
+            ocs_agente.add(oc)
+        # El agente real (RUC de agente) tiene prioridad para nombrar la O/C.
+        if ruc in agentes and oc not in nombre_por_oc:
             nombre_por_oc[oc] = str(f.get("PROVEEDOR", "")).strip()
             ruc_por_oc[oc] = ruc
 
-    ocs_agente = set(nombre_por_oc)
+    # O/C consolidadas por un proveedor relacionado, sin agente real: marcador.
+    for oc in ocs_agente:
+        nombre_por_oc.setdefault(oc, _AGENTE_MANUAL)
+        ruc_por_oc.setdefault(oc, "")
+
     grupos: dict = {}
     for f in filas:
         oc = str(f.get("ORD_COMPRA", "")).strip()
@@ -650,13 +670,15 @@ def construir_detalle(
     output_path: Path,
     sharepoint_cfg: dict | None = None,
     agente_rucs: list[str] | None = None,
+    relacionados_rucs: list[str] | None = None,
 ) -> Path:
     wb = openpyxl.load_workbook(_PLANTILLA)
 
-    # Agrupar por O/C las facturas que incluyen a un agente aduanero. Esas filas
-    # salen de su Operación normal (van solo a 'Agentes de Aduanas').
+    # Agrupar por O/C las facturas que incluyen a un agente o proveedor
+    # relacionado. Esas filas salen de su Operación normal (van solo a 'Agentes
+    # de Aduanas').
     ocs_agente, nombre_por_oc, ruc_por_oc, grupos_agentes = _agrupar_agentes(
-        data["filas"], agente_rucs or []
+        data["filas"], agente_rucs or [], relacionados_rucs or []
     )
 
     grupos: dict = {}

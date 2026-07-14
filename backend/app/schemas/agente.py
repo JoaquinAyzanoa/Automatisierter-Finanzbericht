@@ -8,3 +8,5 @@ class AgenteConfigSchema(BaseModel):
 
     # Lista de RUCs de los agentes aduaneros.
     rucs: list[str] = []
+    # RUCs de proveedores relacionados con agentes (flete, puerto, agenciamiento).
+    relacionados: list[str] = []

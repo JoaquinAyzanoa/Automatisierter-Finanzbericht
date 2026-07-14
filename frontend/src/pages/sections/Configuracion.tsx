@@ -63,6 +63,7 @@ export function Configuracion() {
 
   // ---- Agentes de aduana ----
   const [agRucs, setAgRucs] = useState<string[]>([]);
+  const [agRel, setAgRel] = useState<string[]>([]);
   const [agSaving, setAgSaving] = useState(false);
   const [agDirty, setAgDirty] = useState(false);
   const [agSaved, setAgSaved] = useState(false);
@@ -119,7 +120,10 @@ export function Configuracion() {
     let cancelled = false;
     obtenerAgentesConfig(token)
       .then((cfg) => {
-        if (!cancelled) setAgRucs(cfg.rucs ?? []);
+        if (!cancelled) {
+          setAgRucs(cfg.rucs ?? []);
+          setAgRel(cfg.relacionados ?? []);
+        }
       })
       .catch(() => {
         if (!cancelled) setError("No se pudo cargar la configuración de agentes.");
@@ -153,6 +157,24 @@ export function Configuracion() {
     setAgSaved(false);
   }
 
+  function setRel(index: number, valor: string) {
+    setAgRel((prev) => prev.map((r, i) => (i === index ? valor : r)));
+    setAgDirty(true);
+    setAgSaved(false);
+  }
+
+  function agregarRel() {
+    setAgRel((prev) => [...prev, ""]);
+    setAgDirty(true);
+    setAgSaved(false);
+  }
+
+  function quitarRel(index: number) {
+    setAgRel((prev) => prev.filter((_, i) => i !== index));
+    setAgDirty(true);
+    setAgSaved(false);
+  }
+
   async function guardarAgentes() {
     if (!token) return;
     setAgSaving(true);
@@ -160,8 +182,10 @@ export function Configuracion() {
     try {
       const cfg = await guardarAgentesConfig(token, {
         rucs: agRucs.map((r) => r.trim()).filter((r) => r),
+        relacionados: agRel.map((r) => r.trim()).filter((r) => r),
       });
       setAgRucs(cfg.rucs ?? []);
+      setAgRel(cfg.relacionados ?? []);
       setAgDirty(false);
       setAgSaved(true);
     } catch {
@@ -461,6 +485,50 @@ export function Configuracion() {
                   className="config__delete"
                   onClick={() => quitarRuc(index)}
                   aria-label={`Eliminar Agente ${index + 1}`}
+                >
+                  {trashIcon}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="config__containerHead" style={{ marginTop: "1.25rem" }}>
+          <h3>Proveedores relacionados con agentes</h3>
+          <button type="button" className="config__add" onClick={agregarRel}>
+            + Agregar
+          </button>
+        </div>
+
+        <p className="config__spHint">
+          RUCs de proveedores relacionados con agentes (flete, puerto,
+          agenciamiento, etc.). Si una Orden de Compra incluye a uno de estos
+          RUCs, todo el grupo se consolida en «Detalle de agentes». Si no hay una
+          factura de un agente en esa O/C, el nombre queda como «Colocar nombre de
+          agente manualmente».
+        </p>
+
+        {agRel.length === 0 ? (
+          <p className="config__empty">
+            No hay proveedores relacionados. Usa «Agregar» para añadir un RUC.
+          </p>
+        ) : (
+          <ul className="config__list">
+            {agRel.map((ruc, index) => (
+              <li key={index} className="config__row">
+                <span className="config__label">Relacionado {index + 1}</span>
+                <input
+                  type="text"
+                  className="config__text"
+                  placeholder="RUC del proveedor relacionado (11 dígitos)"
+                  value={ruc}
+                  onChange={(e) => setRel(index, e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="config__delete"
+                  onClick={() => quitarRel(index)}
+                  aria-label={`Eliminar Relacionado ${index + 1}`}
                 >
                   {trashIcon}
                 </button>

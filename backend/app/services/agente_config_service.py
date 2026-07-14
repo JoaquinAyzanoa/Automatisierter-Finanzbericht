@@ -22,24 +22,32 @@ class AgenteConfigService:
     def get(self) -> AgenteAduanaConfig:
         cfg = self.db.get(AgenteAduanaConfig, 1)
         if cfg is None:
-            cfg = AgenteAduanaConfig(id=1, rucs=list(DEFAULT_RUCS))
+            cfg = AgenteAduanaConfig(id=1, rucs=list(DEFAULT_RUCS), relacionados=[])
             self.db.add(cfg)
             self.db.commit()
             self.db.refresh(cfg)
         return cfg
 
-    def save(self, rucs: list[str]) -> AgenteAduanaConfig:
-        cfg = self.get()
-        # Normalizar, quitar vacíos y duplicados conservando el orden.
+    @staticmethod
+    def _limpiar(rucs: list[str]) -> list[str]:
+        """Normaliza, quita vacíos y duplicados conservando el orden."""
         limpios: list[str] = []
         for r in rucs or []:
             n = normalizar_ruc(r)
             if n and n not in limpios:
                 limpios.append(n)
-        cfg.rucs = limpios
+        return limpios
+
+    def save(self, rucs: list[str], relacionados: list[str]) -> AgenteAduanaConfig:
+        cfg = self.get()
+        cfg.rucs = self._limpiar(rucs)
+        cfg.relacionados = self._limpiar(relacionados)
         self.db.commit()
         self.db.refresh(cfg)
         return cfg
 
     def as_list(self) -> list[str]:
         return list(self.get().rucs or [])
+
+    def relacionados_list(self) -> list[str]:
+        return list(self.get().relacionados or [])

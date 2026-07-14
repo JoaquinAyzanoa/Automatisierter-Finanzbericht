@@ -122,12 +122,13 @@ class ProcesoService:
         data = json.loads(proceso.payload)
         output_path = Path(settings.REPORTS_DIR) / DESCARGA_FILENAME
         sharepoint_cfg = SharepointConfigService(self.db).as_dict()
-        agente_rucs = AgenteConfigService(self.db).as_list()
+        agente_svc = AgenteConfigService(self.db)
         return detalle_export.construir_detalle(
             data,
             proceso.fecha_inicio,
             proceso.fecha_final,
             output_path,
             sharepoint_cfg,
-            agente_rucs,
+            agente_svc.as_list(),
+            agente_svc.relacionados_list(),
         )

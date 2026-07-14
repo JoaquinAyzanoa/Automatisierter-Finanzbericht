@@ -16,4 +16,4 @@ def obtener(current_user: CurrentUser, db: DbSession) -> AgenteConfigSchema:
 def guardar(
     payload: AgenteConfigSchema, current_user: CurrentUser, db: DbSession
 ) -> AgenteConfigSchema:
-    return AgenteConfigService(db).save(payload.rucs)
+    return AgenteConfigService(db).save(payload.rucs, payload.relacionados)
