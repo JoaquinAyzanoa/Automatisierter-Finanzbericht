@@ -4,6 +4,7 @@ import {
   ApiError,
   guardarProceso,
   guardarYDescargarProceso,
+  obtenerAgentesConfig,
   obtenerProceso,
   obtenerProcesoLatest,
   triggerBlobDownload,
@@ -74,6 +75,10 @@ function esRucNacional(ruc: unknown): boolean {
   return r.length === 11 && /^\d+$/.test(r) && (r.startsWith("10") || r.startsWith("20"));
 }
 
+function normRuc(v: unknown): string {
+  return String(v ?? "").trim().replace(/\.0$/, "");
+}
+
 // Columna de fecha de vencimiento (posibles nombres).
 const FEC_VCTO_ALIASES = [
   "FEC. VCTO",
@@ -140,6 +145,9 @@ export function Informes({ procesoId }: Props) {
   const [guardado, setGuardado] = useState<
     "idle" | "guardando" | "guardado" | "error"
   >("idle");
+  // RUCs de agentes de aduana (config). Las facturas de una O/C con agente se
+  // muestran en su propia sección (igual que en la descarga), no en su operación.
+  const [agenteRucs, setAgenteRucs] = useState<string[]>([]);
 
   useEffect(() => {
     if (!token) return;
@@ -184,7 +192,39 @@ export function Informes({ procesoId }: Props) {
     };
   }, [token, procesoId]);
 
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    obtenerAgentesConfig(token)
+      .then((cfg) => {
+        if (!cancelled) setAgenteRucs(cfg.rucs ?? []);
+      })
+      .catch(() => {
+        /* si falla, no se separan agentes; no es bloqueante */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
   const operaciones = data?.operaciones ?? [];
+
+  // O/C que incluyen a un agente aduanero (por RUC configurado) y el nombre del
+  // agente por O/C. Mismo criterio que la descarga (detalle_export).
+  const { ocsAgente, nombreAgentePorOc } = useMemo(() => {
+    const rucs = new Set(agenteRucs.map(normRuc).filter(Boolean));
+    const nombre = new Map<string, string>();
+    if (rucs.size === 0 || !data) {
+      return { ocsAgente: new Set<string>(), nombreAgentePorOc: nombre };
+    }
+    for (const f of data.filas) {
+      const oc = String(f["ORD_COMPRA"] ?? "").trim();
+      if (oc && rucs.has(normRuc(f["RUC"])) && !nombre.has(oc)) {
+        nombre.set(oc, String(f["PROVEEDOR"] ?? "").trim());
+      }
+    }
+    return { ocsAgente: new Set(nombre.keys()), nombreAgentePorOc: nombre };
+  }, [data, agenteRucs]);
 
   // Reordena las columnas: MONEDA, PROVEEDOR, PRODUCTO primero; el resto después.
   const columnas = useMemo(() => {
@@ -223,19 +263,31 @@ export function Informes({ procesoId }: Props) {
     return id in overrides ? overrides[id] : (f["__pos"] as number | null);
   }
 
-  const { grupos, otros } = useMemo<{ grupos: Grupo[]; otros: FilaInforme[] }>(() => {
-    if (!data) return { grupos: [], otros: [] };
+  const { grupos, otros, agentes } = useMemo<{
+    grupos: Grupo[];
+    otros: FilaInforme[];
+    agentes: FilaInforme[];
+  }>(() => {
+    if (!data) return { grupos: [], otros: [], agentes: [] };
     const q = busqueda.trim().toLowerCase();
 
     // Se agrupa por la categoría guardada. eff == null => "Otros".
     const mapa = new Map<number, FilaInforme[]>();
     const fuera: FilaInforme[] = [];
+    const ag: FilaInforme[] = [];
     for (const f of data.filas) {
       if (q) {
         const match = Object.entries(f).some(
           ([k, v]) => !k.startsWith("__") && String(v).toLowerCase().includes(q)
         );
         if (!match) continue;
+      }
+      // Las facturas de una O/C con agente van a "Agentes de aduana", no a su
+      // operación ni a "Otros" (coincide con la descarga).
+      const oc = String(f["ORD_COMPRA"] ?? "").trim();
+      if (oc && ocsAgente.has(oc)) {
+        ag.push(f);
+        continue;
       }
       const eff = efectiva(f);
       if (eff == null) {
@@ -255,9 +307,9 @@ export function Informes({ procesoId }: Props) {
       }))
       .sort((a, b) => a.pos - b.pos);
 
-    return { grupos, otros: fuera };
+    return { grupos, otros: fuera, agentes: ag };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, busqueda, overrides, opByPos]);
+  }, [data, busqueda, overrides, opByPos, ocsAgente]);
 
   const otrosFiltrados = useMemo(() => {
     const q = otrosBusqueda.trim().toLowerCase();
@@ -404,6 +456,45 @@ export function Informes({ procesoId }: Props) {
           <td key={c}>{mostrarCelda(f[c])}</td>
         ))}
       </tr>
+    );
+  }
+
+  // Fila de un agente: no se reasigna (la determina la O/C + config), así que
+  // no lleva desplegable; en la col Op se muestra que es un agente.
+  function renderFilaAgente(f: FilaInforme): ReactNode {
+    const id = f["__id"] as number;
+    const oc = String(f["ORD_COMPRA"] ?? "").trim();
+    const nombre = nombreAgentePorOc.get(oc) ?? "";
+    return (
+      <tr key={id}>
+        <td
+          className="informes__opCol informes__opAgente"
+          title={nombre ? `Agente: ${nombre}` : "Agente de aduana"}
+        >
+          Agente
+        </td>
+        {columnas.map((c) => (
+          <td key={c}>{mostrarCelda(f[c])}</td>
+        ))}
+      </tr>
+    );
+  }
+
+  function tablaAgentes(filas: FilaInforme[]): ReactNode {
+    return (
+      <TablaScroll topScroll={filas.length > 12}>
+        <table className="informes__tabla">
+          <thead>
+            <tr>
+              <th className="informes__opCol">Op.</th>
+              {columnas.map((c) => (
+                <th key={c}>{etiquetaColumna(c)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>{filas.map((f) => renderFilaAgente(f))}</tbody>
+        </table>
+      </TablaScroll>
     );
   }
 
@@ -574,7 +665,10 @@ export function Informes({ procesoId }: Props) {
 
       {loading ? (
         <div className="informes__msg">Cargando…</div>
-      ) : !error && grupos.length === 0 && otros.length === 0 ? (
+      ) : !error &&
+        grupos.length === 0 &&
+        otros.length === 0 &&
+        agentes.length === 0 ? (
         <div className="informes__msg">Sin resultados.</div>
       ) : (
         <div className="informes__grupos">
@@ -589,6 +683,18 @@ export function Informes({ procesoId }: Props) {
               {tabla(g.filas)}
             </div>
           ))}
+
+          {agentes.length > 0 && (
+            <div className="informes__grupo">
+              <div className="informes__grupoHead">
+                <span className="informes__grupoTitulo">Agentes de aduana</span>
+                <span className="informes__grupoMeta">
+                  {agentes.length} filas · consolidadas por O/C
+                </span>
+              </div>
+              {tablaAgentes(agentes)}
+            </div>
+          )}
 
           {otros.length > 0 &&
             (() => {

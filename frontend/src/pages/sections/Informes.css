@@ -236,6 +236,13 @@
   white-space: nowrap;
 }
 
+.informes__opAgente {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-align: center;
+}
+
 .informes__otrosHead {
   width: 100%;
   border: none;
