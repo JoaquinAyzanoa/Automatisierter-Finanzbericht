@@ -608,7 +608,7 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
 _TXT_AG = {
     1: "PROVEEDOR", 2: "RUC", 3: "TIPO", 4: "NUMERO",
     5: "FEC REGISTRO", 6: "FECHA DOC.", 7: "FEC. VCTO",
-    16: "PRODUCTO", 18: "ORD_COMPRA", 20: "REGISTRO",
+    16: "PRODUCTO", 18: "ORD_COMPRA", 19: "REGISTRO", 20: "REGISTRO",
 }
 
 
@@ -699,8 +699,11 @@ def _construir_detalle_agentes_sheet(wb, grupos_agentes, nombre_por_oc, sp_cfg):
         dst.cell(dst_r, 15).value = None
         dst.merge_cells(start_row=dst_r, start_column=1, end_row=dst_r, end_column=ncols_dst)
         dst_r += 1
-        # Cabecera.
+        # Cabecera. Se añade el encabezado 'N° Registro' en la columna S (19),
+        # que la plantilla de esta hoja no traía (estilo de la cabecera vecina).
         _copiar_fila_desplazada(src, dst, header_row, dst_r, ncols, es_cabecera=True)
+        _clonar_estilo(dst.cell(dst_r, 19), dst.cell(dst_r, 18))
+        dst.cell(dst_r, 19).value = "N° Registro"
         if src.row_dimensions[header_row].height:
             dst.row_dimensions[dst_r].height = src.row_dimensions[header_row].height
         dst_r += 1
