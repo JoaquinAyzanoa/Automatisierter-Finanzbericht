@@ -117,56 +117,83 @@ def _neto(f: dict) -> float:
     return round(base, 2)
 
 
-# Marcador cuando la O/C se consolida por un proveedor relacionado pero no hay
-# una factura del agente en los datos (el usuario pone el nombre a mano).
+# Marcador cuando la O/C se consolida por un proveedor relacionado / TIPO 21
+# pero no hay una factura del agente en los datos (nombre a mano).
 _AGENTE_MANUAL = "Colocar nombre de agente manualmente"
+
+# Tipo de comprobante que, por sí solo, marca una factura como relacionada a un
+# agente (va a 'Detalle de agentes' aunque no haya coincidencia de O/C).
+_TIPO_AGENTE = "21"
+
+
+def _tipo(f: dict) -> str:
+    return re.sub(r"\.0$", "", str(f.get("TIPO", "")).strip())
+
+
+def _es_fila_agente(f: dict, ocs_consolidadas: set) -> bool:
+    """Una factura va a 'Detalle de agentes' si su O/C está consolidada (tiene un
+    agente/proveedor relacionado) o si su TIPO es de agente (21)."""
+    oc = str(f.get("ORD_COMPRA", "")).strip()
+    return (bool(oc) and oc in ocs_consolidadas) or _tipo(f) == _TIPO_AGENTE
 
 
 def _agrupar_agentes(
     filas: list[dict], agente_rucs: list[str], relacionados_rucs: list[str] = None
 ) -> tuple:
-    """Detecta las O/C que incluyen a un agente o a un proveedor relacionado y
-    agrupa TODAS sus facturas.
+    """Agrupa las facturas que van a 'Detalle de agentes'.
+
+    - Una O/C se consolida (TODAS sus facturas) si incluye un RUC de agente o de
+      proveedor relacionado.
+    - Además, cualquier factura con TIPO 21 va a agentes por sí sola (aunque su
+      O/C no se consolide).
 
     Devuelve:
-      - ocs_agente: set de N° O/C-O/S consolidadas.
+      - ocs_consolidadas: set de O/C consolidadas por RUC (para excluir de las
+        operaciones normales).
       - nombre_por_oc: O/C -> nombre del agente (o marcador si no hay agente real).
       - ruc_por_oc: O/C -> RUC del agente ("" si no hay agente real).
-      - grupos: (O/C, MONEDA) -> lista de filas de esa orden y moneda.
+      - grupos: (O/C, MONEDA) -> lista de filas (O/C "" = facturas TIPO 21 sin O/C).
     """
     agentes = {_norm_ruc(r) for r in (agente_rucs or []) if str(r).strip()}
     relacionados = {_norm_ruc(r) for r in (relacionados_rucs or []) if str(r).strip()}
     disparadores = agentes | relacionados
-    if not disparadores:
-        return set(), {}, {}, {}
 
-    nombre_por_oc: dict[str, str] = {}
-    ruc_por_oc: dict[str, str] = {}
-    ocs_agente: set[str] = set()
+    # O/C consolidadas (toda la orden) + nombre/ruc del agente real por O/C.
+    ocs_consolidadas: set[str] = set()
+    agente_nombre_oc: dict[str, str] = {}
+    agente_ruc_oc: dict[str, str] = {}
     for f in filas:
         oc = str(f.get("ORD_COMPRA", "")).strip()
         if not oc:
             continue
         ruc = _norm_ruc(f.get("RUC", ""))
         if ruc in disparadores:
-            ocs_agente.add(oc)
-        # El agente real (RUC de agente) tiene prioridad para nombrar la O/C.
-        if ruc in agentes and oc not in nombre_por_oc:
-            nombre_por_oc[oc] = str(f.get("PROVEEDOR", "")).strip()
-            ruc_por_oc[oc] = ruc
+            ocs_consolidadas.add(oc)
+        if ruc in agentes and oc not in agente_nombre_oc:
+            agente_nombre_oc[oc] = str(f.get("PROVEEDOR", "")).strip()
+            agente_ruc_oc[oc] = ruc
 
-    # O/C consolidadas por un proveedor relacionado, sin agente real: marcador.
-    for oc in ocs_agente:
-        nombre_por_oc.setdefault(oc, _AGENTE_MANUAL)
-        ruc_por_oc.setdefault(oc, "")
-
+    # Agrupar todas las filas que van a agentes (por O/C+moneda; sin O/C -> "").
     grupos: dict = {}
     for f in filas:
+        if not _es_fila_agente(f, ocs_consolidadas):
+            continue
         oc = str(f.get("ORD_COMPRA", "")).strip()
-        if oc and oc in ocs_agente:
-            moneda = str(f.get("MONEDA", "")).strip().upper()
-            grupos.setdefault((oc, moneda), []).append(f)
-    return ocs_agente, nombre_por_oc, ruc_por_oc, grupos
+        moneda = str(f.get("MONEDA", "")).strip().upper()
+        grupos.setdefault((oc, moneda), []).append(f)
+
+    # Nombre/RUC por O/C: agente real si existe, si no marcador para llenar a mano.
+    nombre_por_oc: dict[str, str] = {}
+    ruc_por_oc: dict[str, str] = {}
+    for oc, _moneda in grupos:
+        if oc in agente_nombre_oc:
+            nombre_por_oc[oc] = agente_nombre_oc[oc]
+            ruc_por_oc[oc] = agente_ruc_oc[oc]
+        else:
+            nombre_por_oc[oc] = _AGENTE_MANUAL
+            ruc_por_oc[oc] = ""
+
+    return ocs_consolidadas, nombre_por_oc, ruc_por_oc, grupos
 
 
 def _copiar_celda(s, d, src_r: int, dst_r: int, src_col: int, dst_col: int) -> None:
@@ -677,15 +704,14 @@ def construir_detalle(
     # Agrupar por O/C las facturas que incluyen a un agente o proveedor
     # relacionado. Esas filas salen de su Operación normal (van solo a 'Agentes
     # de Aduanas').
-    ocs_agente, nombre_por_oc, ruc_por_oc, grupos_agentes = _agrupar_agentes(
+    ocs_consolidadas, nombre_por_oc, ruc_por_oc, grupos_agentes = _agrupar_agentes(
         data["filas"], agente_rucs or [], relacionados_rucs or []
     )
 
     grupos: dict = {}
     for f in data["filas"]:
-        oc = str(f.get("ORD_COMPRA", "")).strip()
-        if oc and oc in ocs_agente:
-            continue  # consolidada en Agentes de Aduanas
+        if _es_fila_agente(f, ocs_consolidadas):
+            continue  # va a 'Agentes de Aduanas' (O/C consolidada o TIPO 21)
         pos = f.get("__pos")
         if pos is None:  # "Otros" no va al Excel
             continue

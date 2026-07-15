@@ -214,18 +214,15 @@ export function Informes({ procesoId }: Props) {
 
   const operaciones = data?.operaciones ?? [];
 
-  // O/C que incluyen a un agente o proveedor relacionado (por RUC configurado)
-  // y el nombre del agente por O/C. Mismo criterio que la descarga
-  // (detalle_export): si no hay un agente real, se marca para llenar a mano.
-  const { ocsAgente, nombreAgentePorOc } = useMemo(() => {
+  // O/C consolidadas (por RUC de agente/relacionado) y nombre del agente real
+  // por O/C. Mismo criterio que la descarga (detalle_export).
+  const { ocsConsolidadas, agenteNombrePorOc } = useMemo(() => {
     const agentes = new Set(agenteRucs.map(normRuc).filter(Boolean));
     const relacionados = new Set(agenteRelacionados.map(normRuc).filter(Boolean));
     const disparadores = new Set([...agentes, ...relacionados]);
-    const nombre = new Map<string, string>();
-    if (disparadores.size === 0 || !data) {
-      return { ocsAgente: new Set<string>(), nombreAgentePorOc: nombre };
-    }
     const ocs = new Set<string>();
+    const nombre = new Map<string, string>();
+    if (!data) return { ocsConsolidadas: ocs, agenteNombrePorOc: nombre };
     for (const f of data.filas) {
       const oc = String(f["ORD_COMPRA"] ?? "").trim();
       if (!oc) continue;
@@ -236,11 +233,22 @@ export function Informes({ procesoId }: Props) {
         nombre.set(oc, String(f["PROVEEDOR"] ?? "").trim());
       }
     }
-    for (const oc of ocs) {
-      if (!nombre.has(oc)) nombre.set(oc, "Colocar nombre de agente manualmente");
-    }
-    return { ocsAgente: ocs, nombreAgentePorOc: nombre };
+    return { ocsConsolidadas: ocs, agenteNombrePorOc: nombre };
   }, [data, agenteRucs, agenteRelacionados]);
+
+  // Una factura va a "Agentes de aduana" si su O/C está consolidada o su TIPO
+  // es de agente (21). Coincide con la descarga.
+  function esFilaAgente(f: FilaInforme): boolean {
+    const oc = String(f["ORD_COMPRA"] ?? "").trim();
+    const tipo = String(f["TIPO"] ?? "").trim().replace(/\.0$/, "");
+    return (oc !== "" && ocsConsolidadas.has(oc)) || tipo === "21";
+  }
+
+  // Nombre del agente para una fila: real si su O/C lo tiene, si no, marcador.
+  function nombreAgente(f: FilaInforme): string {
+    const oc = String(f["ORD_COMPRA"] ?? "").trim();
+    return agenteNombrePorOc.get(oc) ?? "Colocar nombre de agente manualmente";
+  }
 
   // Reordena las columnas: MONEDA, PROVEEDOR, PRODUCTO primero; el resto después.
   const columnas = useMemo(() => {
@@ -298,10 +306,9 @@ export function Informes({ procesoId }: Props) {
         );
         if (!match) continue;
       }
-      // Las facturas de una O/C con agente van a "Agentes de aduana", no a su
-      // operación ni a "Otros" (coincide con la descarga).
-      const oc = String(f["ORD_COMPRA"] ?? "").trim();
-      if (oc && ocsAgente.has(oc)) {
+      // Las facturas de agente (O/C consolidada o TIPO 21) van a "Agentes de
+      // aduana", no a su operación ni a "Otros" (coincide con la descarga).
+      if (esFilaAgente(f)) {
         ag.push(f);
         continue;
       }
@@ -325,7 +332,7 @@ export function Informes({ procesoId }: Props) {
 
     return { grupos, otros: fuera, agentes: ag };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, busqueda, overrides, opByPos, ocsAgente]);
+  }, [data, busqueda, overrides, opByPos, ocsConsolidadas]);
 
   const otrosFiltrados = useMemo(() => {
     const q = otrosBusqueda.trim().toLowerCase();
@@ -479,13 +486,12 @@ export function Informes({ procesoId }: Props) {
   // no lleva desplegable; en la col Op se muestra que es un agente.
   function renderFilaAgente(f: FilaInforme): ReactNode {
     const id = f["__id"] as number;
-    const oc = String(f["ORD_COMPRA"] ?? "").trim();
-    const nombre = nombreAgentePorOc.get(oc) ?? "";
+    const nombre = nombreAgente(f);
     return (
       <tr key={id}>
         <td
           className="informes__opCol informes__opAgente"
-          title={nombre ? `Agente: ${nombre}` : "Agente de aduana"}
+          title={`Agente: ${nombre}`}
         >
           Agente
         </td>
