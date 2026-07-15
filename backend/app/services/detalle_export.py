@@ -77,6 +77,12 @@ def _norm_ruc(ruc) -> str:
     return re.sub(r"\.0$", "", str(ruc).strip())
 
 
+def _fmt_tipo(v) -> str:
+    """Normaliza el TIPO de comprobante: un solo dígito se rellena a 2 ('1' -> '01')."""
+    s = re.sub(r"\.0$", "", str(v).strip())
+    return "0" + s if s.isdigit() and len(s) == 1 else s
+
+
 def _clonar_estilo(d, s) -> None:
     if s.has_style:
         d._style = copy(s._style)
@@ -102,6 +108,7 @@ def _valores_fila(f: dict) -> dict:
     det = round(importe * p_det / 100, 2)
     vals = {i: (_fecha(f.get(k)) if i in _FECHA_COLS else f.get(k, "")) for i, k in _TXT.items()}
     vals[_COL_RUC] = _norm_ruc(f.get("RUC", ""))
+    vals[3] = _fmt_tipo(f.get("TIPO", ""))  # TIPO: "1" -> "01"
     # %DET como fracción (12 -> 0.12) para que Excel muestre "12 %".
     # RET y Neto se escriben como fórmulas (ver _escribir_fila).
     vals.update({8: importe, 9: pagado, 10: saldo, 12: p_det / 100, 13: det})
@@ -661,6 +668,7 @@ def _valores_fila_ag(f: dict) -> dict:
         for i, k in _TXT_AG.items()
     }
     vals[_COL_RUC] = _norm_ruc(f.get("RUC", ""))
+    vals[3] = _fmt_tipo(f.get("TIPO", ""))  # TIPO: "1" -> "01"
     vals.update({8: importe, 9: pagado, 10: saldo, 11: p_det / 100, 12: det})
     return vals
 
