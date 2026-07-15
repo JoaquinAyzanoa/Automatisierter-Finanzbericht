@@ -391,6 +391,23 @@ def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg) -> None:
             dst.cell(r, _COL_LINK).value = None
 
 
+_MONEDA_TITULO = {"SOL": "Soles", "USD": "Dólares"}
+
+
+def _titulo_operacion(pos, texto, moneda) -> str:
+    """'Operación N - <texto> - <Soles/Dólares>' según la moneda de la config.
+    No duplica la moneda si el texto ya la incluye."""
+    texto = (texto or "").strip()
+    m = str(moneda or "").strip()
+    lbl = _MONEDA_TITULO.get(m.upper(), m)
+    partes = [f"Operación {pos}"]
+    if texto:
+        partes.append(texto)
+    if lbl and not texto.lower().endswith(lbl.lower()):
+        partes.append(lbl)
+    return " - ".join(partes)
+
+
 def _construir_detalle_sheet(
     wb, grupos, operaciones, fecha_inicio, fecha_final, sp_cfg,
     grupos_agentes=None, nombre_por_oc=None, ruc_por_oc=None, ref_agentes=None,
@@ -406,8 +423,9 @@ def _construir_detalle_sheet(
     nombre_por_oc = nombre_por_oc or {}
     ruc_por_oc = ruc_por_oc or {}
     ref_agentes = ref_agentes or {"oc": {}, "moneda": {}}
-    # Texto actual de cada operación (config de la app manda sobre la plantilla).
+    # Texto/moneda actuales de cada operación (config manda sobre la plantilla).
     op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
+    op_moneda = {o["pos"]: o.get("moneda", "") for o in operaciones}
 
     dst = wb.create_sheet("__detalle_tmp__")
     _copiar_anchos(src, dst)
@@ -526,9 +544,8 @@ def _construir_detalle_sheet(
             m = _OPERACION_RE.match(str(a)) if a else None
             if m:
                 pos = int(m.group(1))
-                texto = (op_texto.get(pos) or "").strip()
-                dst.cell(dst_r, 1).value = (
-                    f"Operación {pos}" + (f" - {texto}" if texto else "")
+                dst.cell(dst_r, 1).value = _titulo_operacion(
+                    pos, op_texto.get(pos), op_moneda.get(pos)
                 )
             row_map[src_r] = dst_r
             dst_r += 1
@@ -548,8 +565,9 @@ def _construir_detalle_sheet(
             dst_r += 1  # fila en blanco de separación
             # Título.
             _copiar_fila_desplazada(src, dst, m_titulo, dst_r, ncols)
-            texto = (op_texto.get(pos) or "").strip()
-            dst.cell(dst_r, 1).value = f"Operación {pos}" + (f" - {texto}" if texto else "")
+            dst.cell(dst_r, 1).value = _titulo_operacion(
+                pos, op_texto.get(pos), op_moneda.get(pos)
+            )
             dst_r += 1
             # Cabecera.
             _copiar_fila_desplazada(src, dst, m_header, dst_r, ncols, es_cabecera=True)
@@ -602,6 +620,7 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
         return
     ws = wb["Resumen"]
     op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
+    op_moneda = {o["pos"]: o.get("moneda", "") for o in operaciones}
     # En 'I. PAGOS A REALIZAR' cada fila tiene la etiqueta 'Operación N' en col B
     # y una fórmula en col D que apunta al TOTAL de esa operación en Detalle.
     # Re-rotulamos la etiqueta con el nombre actual (la plantilla puede tenerlo
@@ -612,9 +631,8 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
         m = _OPERACION_RE.match(str(b)) if b else None
         if m:
             pos = int(m.group(1))
-            texto = (op_texto.get(pos) or "").strip()
-            ws.cell(r, 2).value = (
-                f"Operación {pos}" + (f" - {texto}" if texto else "")
+            ws.cell(r, 2).value = _titulo_operacion(
+                pos, op_texto.get(pos), op_moneda.get(pos)
             )
             if pos in total_rows:
                 ws.cell(r, 4).value = f"=+Detalle!P{total_rows[pos]}"
