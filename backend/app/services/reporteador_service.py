@@ -5,11 +5,12 @@ Reglas:
 - NUMERO: sin cambios.
 - ORD_COMPRA:
     * Si ya tiene un número -> no se modifica.
-    * Si está vacío, se mira el inicio de PRODUCTO:
-        - Caso A: número simple ("31015 ...")     -> se antepone "100" -> "10031015".
-        - Caso B: número con guiones ("31116-1 ..") -> se deja igual  -> "31116-1".
-        - Caso C: no hay número al inicio           -> queda vacío.
-- PRODUCTO: se le quita el número inicial (el de ORD_COMPRA) y queda limpio.
+    * Si está vacío, se mira el PRIMER token de PRODUCTO (hasta el primer espacio):
+        - Caso A: número simple ("31015 ...")        -> se antepone "100" -> "10031015".
+        - Caso B: número con guiones ("31116-1 ..")   -> se deja igual  -> "31116-1".
+        - Caso B: número con sufijo ("30959-A ..")    -> se deja igual  -> "30959-A".
+        - Caso C: el token no es un código             -> queda vacío.
+- PRODUCTO: se le quita el código inicial (el de ORD_COMPRA) y queda limpio.
 - REGISTRO y RUC: sin cambios.
 - Se eliminan filas duplicadas exactas.
 """
@@ -35,9 +36,9 @@ _DETRACCION_ALIASES = [
     "DETRA-TASA",
 ]
 
-# Número al inicio: dígitos, opcionalmente seguido de segmentos "-dígitos",
-# y (opcionalmente) el resto del texto del producto.
-_LEADING_NUM_RE = re.compile(r"^\s*(\d+(?:-\d+)*)(?:\s+(.*\S))?\s*$")
+# Código de O/C: dígitos, opcionalmente seguido de segmentos "-alfanumérico"
+# (p. ej. "31015", "31116-1", "30959-A"). Es el primer token del PRODUCTO.
+_ORD_TOKEN_RE = re.compile(r"\d+(?:-[A-Za-z0-9]+)*")
 
 
 def avance_path() -> Path:
@@ -64,10 +65,13 @@ def _clean_id(value) -> str:
 def _clean_ord_and_producto(ord_raw, producto_raw) -> tuple[str, str]:
     producto = "" if _is_empty(producto_raw) else str(producto_raw).strip()
 
-    match = _LEADING_NUM_RE.match(producto)
-    if match:
-        leading = match.group(1)
-        rest = (match.group(2) or "").strip()
+    # El código de O/C, si existe, es el PRIMER token del producto (sin espacios):
+    # "30959-A ALCOHOL ISOAMILICO THC" -> código "30959-A", resto "ALCOHOL...".
+    partes = producto.split(None, 1)
+    primero = partes[0] if partes else ""
+    if partes and _ORD_TOKEN_RE.fullmatch(primero):
+        leading = primero
+        rest = partes[1].strip() if len(partes) > 1 else ""
     else:
         leading = None
         rest = producto
@@ -76,10 +80,10 @@ def _clean_ord_and_producto(ord_raw, producto_raw) -> tuple[str, str]:
         # Ya tiene número -> no se modifica.
         ord_final = _clean_id(ord_raw)
     elif leading is None:
-        # Caso C: sin número al inicio.
+        # Caso C: el primer token no es un código.
         ord_final = ""
     elif "-" in leading:
-        # Caso B: número con guiones -> se deja igual.
+        # Caso B: código con guiones/sufijo (31116-1, 30959-A) -> se deja igual.
         ord_final = leading
     else:
         # Caso A: número simple -> se antepone "100".
