@@ -83,6 +83,11 @@ def _fmt_tipo(v) -> str:
     return "0" + s if s.isdigit() and len(s) == 1 else s
 
 
+def _key_prov(f) -> str:
+    """Clave para ordenar filas por PROVEEDOR (alfabético, sin distinguir may/min)."""
+    return str(f.get("PROVEEDOR", "")).strip().upper()
+
+
 def _clonar_estilo(d, s) -> None:
     if s.has_style:
         d._style = copy(s._style)
@@ -448,7 +453,7 @@ def _construir_detalle_sheet(
     while src_r <= src.max_row:
         if src_r in ops:
             pos, total_row = ops[src_r]
-            filas = grupos.get(pos, [])
+            filas = sorted(grupos.get(pos, []), key=_key_prov)
             estilo_row = src_r  # fila de datos modelo (estilos)
             data_ini = dst_r
             if filas:
@@ -568,7 +573,7 @@ def _construir_detalle_sheet(
         m_total = ops[modelo_ds][1]
         m_titulo, m_header, m_data = modelo_ds - 2, modelo_ds - 1, modelo_ds
         for pos in extra:
-            filas = grupos[pos]
+            filas = sorted(grupos[pos], key=_key_prov)
             dst_r += 1  # fila en blanco de separación
             # Título.
             _copiar_fila_desplazada(src, dst, m_titulo, dst_r, ncols)
