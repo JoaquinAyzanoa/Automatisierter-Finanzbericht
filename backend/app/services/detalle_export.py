@@ -132,7 +132,10 @@ def _tipo(f: dict) -> str:
 
 def _es_fila_agente(f: dict, ocs_consolidadas: set) -> bool:
     """Una factura va a 'Detalle de agentes' si su O/C está consolidada (tiene un
-    agente/proveedor relacionado) o si su TIPO es de agente (21)."""
+    agente/proveedor relacionado) o si su TIPO es de agente (21). Si el usuario
+    la reasignó manualmente (`__manual`), respeta esa decisión y no va a agentes."""
+    if f.get("__manual"):
+        return False
     oc = str(f.get("ORD_COMPRA", "")).strip()
     return (bool(oc) and oc in ocs_consolidadas) or _tipo(f) == _TIPO_AGENTE
 

@@ -307,8 +307,11 @@ export function Informes({ procesoId }: Props) {
         if (!match) continue;
       }
       // Las facturas de agente (O/C consolidada o TIPO 21) van a "Agentes de
-      // aduana", no a su operación ni a "Otros" (coincide con la descarga).
-      if (esFilaAgente(f)) {
+      // aduana", salvo que el usuario las haya reasignado manualmente (override
+      // en sesión o marca __manual persistida). Coincide con la descarga.
+      const idF = f["__id"] as number;
+      const manual = idF in overrides || !!f["__manual"];
+      if (esFilaAgente(f) && !manual) {
         ag.push(f);
         continue;
       }
@@ -454,18 +457,23 @@ export function Informes({ procesoId }: Props) {
     }
   }
 
-  function renderFila(f: FilaInforme): ReactNode {
-    const id = f["__id"] as number;
-    // Categoría efectiva; null => "Otros" (sin categoría).
-    const valor = efectiva(f);
-    // Solo categorías del mismo ámbito (Nacional/Exterior) y, dentro, misma moneda.
+  // Operaciones asignables a una fila: mismo ámbito (Nacional/Exterior) y, dentro,
+  // misma moneda.
+  function opcionesDeFila(f: FilaInforme) {
     const rowMoneda = String(f["MONEDA"] ?? "").trim().toUpperCase();
     const rowAmbito = esRucNacional(f["RUC"]) ? "Nacional" : "Exterior";
     const porAmbito = operaciones.filter((o) => o.ambito === rowAmbito);
     const porMoneda = porAmbito.filter(
       (o) => String(o.moneda).toUpperCase() === rowMoneda
     );
-    const opcionesFila = porMoneda.length > 0 ? porMoneda : porAmbito;
+    return porMoneda.length > 0 ? porMoneda : porAmbito;
+  }
+
+  function renderFila(f: FilaInforme): ReactNode {
+    const id = f["__id"] as number;
+    // Categoría efectiva; null => "Otros" (sin categoría).
+    const valor = efectiva(f);
+    const opcionesFila = opcionesDeFila(f);
     return (
       <tr key={id}>
         <td className="informes__opCol">
@@ -482,18 +490,21 @@ export function Informes({ procesoId }: Props) {
     );
   }
 
-  // Fila de un agente: no se reasigna (la determina la O/C + config), así que
-  // no lleva desplegable; en la col Op se muestra que es un agente.
+  // Fila de un agente: muestra "Agente" y permite sacarla a "Otros" o a una
+  // operación (por si el usuario quiere quitar facturas). Al reasignar sale de
+  // esta sección y la descarga respeta la decisión.
   function renderFilaAgente(f: FilaInforme): ReactNode {
     const id = f["__id"] as number;
     const nombre = nombreAgente(f);
     return (
       <tr key={id}>
-        <td
-          className="informes__opCol informes__opAgente"
-          title={`Agente: ${nombre}`}
-        >
-          Agente
+        <td className="informes__opCol" title={`Agente: ${nombre}`}>
+          <OperacionSelect
+            value={null}
+            emptyLabel="Agente"
+            options={opcionesDeFila(f)}
+            onChange={(pos) => reasignar(id, pos)}
+          />
         </td>
         {columnas.map((c) => (
           <td key={c}>{mostrarCelda(f[c])}</td>

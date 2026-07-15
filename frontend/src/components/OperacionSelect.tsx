@@ -8,6 +8,9 @@ interface Props {
   value: number | null;
   options: OperacionOpcion[];
   onChange: (pos: number | null) => void;
+  // Etiqueta a mostrar cuando la fila no está asignada aún (p. ej. "Agente").
+  // Si se define, `null` NO se interpreta como "Otros seleccionado".
+  emptyLabel?: string;
 }
 
 const chevron = (
@@ -16,7 +19,9 @@ const chevron = (
   </svg>
 );
 
-export function OperacionSelect({ value, options, onChange }: Props) {
+export function OperacionSelect({ value, options, onChange, emptyLabel }: Props) {
+  // En modo "emptyLabel" (fila de agente sin reasignar), null no está activo.
+  const otrosActivo = value === null && emptyLabel === undefined;
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0, minWidth: 0 });
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -53,7 +58,7 @@ export function OperacionSelect({ value, options, onChange }: Props) {
         onClick={() => setOpen((o) => !o)}
         title="Cambiar operación"
       >
-        <span>{value ?? "–"}</span>
+        <span>{value ?? emptyLabel ?? "–"}</span>
         {chevron}
       </button>
 
@@ -91,9 +96,7 @@ export function OperacionSelect({ value, options, onChange }: Props) {
               <li>
                 <button
                   type="button"
-                  className={
-                    "opsel__item" + (value === null ? " is-active" : "")
-                  }
+                  className={"opsel__item" + (otrosActivo ? " is-active" : "")}
                   onClick={() => {
                     onChange(null);
                     setOpen(false);

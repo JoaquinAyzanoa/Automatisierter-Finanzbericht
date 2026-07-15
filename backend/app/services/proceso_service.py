@@ -98,11 +98,14 @@ class ProcesoService:
 
         data = json.loads(proceso.payload)
 
-        # Aplicar reasignaciones manuales sobre __pos.
+        # Aplicar reasignaciones manuales sobre __pos. `__manual` marca que el
+        # usuario tocó la fila (para que, aunque sea de agente, respete su
+        # decisión y no vuelva a 'Detalle de agentes').
         ov = {int(k): v for k, v in overrides.items()}
         for fila in data["filas"]:
             if fila.get("__id") in ov:
                 fila["__pos"] = ov[fila["__id"]]
+                fila["__manual"] = True
 
         proceso.payload = json.dumps(data, ensure_ascii=False)
         proceso.fecha_inicio = fecha_inicio or None
