@@ -658,6 +658,32 @@ def _escribir_fila_agente(src, estilo_row, dst, r, f, ncols_src, sp_cfg, agente)
 
 _MONEDA_ETIQUETA = {"SOL": "SOLES", "USD": "DOLARES"}
 
+# Anchos de la hoja 'Detalle de agentes'.
+# - Fijos: columnas numéricas / de fórmula / fechas.
+_ANCHOS_FIJOS_AG = {
+    2: 13, 3: 6, 5: 13, 6: 13, 7: 13, 8: 12, 9: 11, 10: 12,
+    11: 8, 12: 12, 13: 8, 14: 11, 15: 12, 20: 14,
+}
+# - Auto (por contenido) con (mínimo, máximo): columnas de texto.
+_ANCHOS_AUTO_AG = {
+    1: (18, 45), 4: (12, 22), 16: (16, 55), 17: (18, 45), 18: (11, 18), 19: (12, 16),
+}
+
+
+def _ajustar_anchos_agentes(dst, max_row: int) -> None:
+    """Ajusta los anchos de 'Detalle de agentes' para que los datos se vean
+    completos (auto por contenido en texto; fijo en numéricas)."""
+    for c, w in _ANCHOS_FIJOS_AG.items():
+        dst.column_dimensions[get_column_letter(c)].width = w
+    for c, (lo, hi) in _ANCHOS_AUTO_AG.items():
+        maxlen = 0
+        for r in range(1, max_row + 1):
+            v = dst.cell(r, c).value
+            if v is None or (isinstance(v, str) and v.startswith("=")):
+                continue
+            maxlen = max(maxlen, len(str(v)))
+        dst.column_dimensions[get_column_letter(c)].width = min(max(maxlen + 2, lo), hi)
+
 
 def _construir_detalle_agentes_sheet(wb, grupos_agentes, nombre_por_oc, sp_cfg):
     """Reconstruye la hoja 'Detalle de agentes' con el detalle de todas las
@@ -742,6 +768,8 @@ def _construir_detalle_agentes_sheet(wb, grupos_agentes, nombre_por_oc, sp_cfg):
         dst.merge_cells(start_row=dst_r, start_column=1, end_row=dst_r, end_column=14)
         ref["moneda"][moneda] = dst_r
         dst_r += 2  # línea en blanco de separación entre monedas
+
+    _ajustar_anchos_agentes(dst, dst_r)
 
     pos_idx = wb.sheetnames.index("Detalle de agentes")
     del wb["Detalle de agentes"]
