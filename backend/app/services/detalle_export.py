@@ -260,6 +260,11 @@ def _copiar_anchos(src, dst) -> None:
     dst.column_dimensions[get_column_letter(_COL_RUC)].width = 13  # RUC
 
 
+# Anchos de las columnas numéricas del 'Detalle' (para que no salgan "######").
+# IMPORTE, PAGADO, SALDO, PLAZO, %DET, DET, %RET, RET, Neto.
+_ANCHOS_NUM_DETALLE = {8: 12, 9: 11, 10: 12, 11: 7, 12: 8, 13: 12, 14: 8, 15: 10, 16: 12}
+
+
 def _detectar_operaciones(ws: Worksheet) -> dict:
     """data_start_row -> (pos, total_row) para cada sección 'Operación N'."""
     secciones: dict = {}
@@ -406,6 +411,9 @@ def _construir_detalle_sheet(
 
     dst = wb.create_sheet("__detalle_tmp__")
     _copiar_anchos(src, dst)
+    # Anchos fijos para las columnas numéricas (evita "######" en DET, etc.).
+    for c, w in _ANCHOS_NUM_DETALLE.items():
+        dst.column_dimensions[get_column_letter(c)].width = w
 
     row_map: dict = {}
     total_rows: dict = {}   # pos -> fila TOTAL (destino) de esa operación
