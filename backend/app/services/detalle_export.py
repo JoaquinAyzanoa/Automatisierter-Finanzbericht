@@ -82,6 +82,17 @@ def _clonar_estilo(d, s) -> None:
         d._style = copy(s._style)
 
 
+def _quitar_negrita(cell) -> None:
+    """Quita la negrita de una celda conservando el resto de la fuente."""
+    f = cell.font
+    if f is not None and f.bold:
+        cell.font = Font(
+            name=f.name, size=f.size, bold=False, italic=f.italic,
+            vertAlign=f.vertAlign, underline=f.underline, strike=f.strike,
+            color=f.color,
+        )
+
+
 def _valores_fila(f: dict) -> dict:
     """Valores por columna (SALIDA, 1-based) para una fila del Detalle."""
     importe = round(_num(f.get("IMPORTE")), 2)
@@ -645,6 +656,9 @@ def _escribir_fila_agente(src, estilo_row, dst, r, f, ncols_src, sp_cfg, agente)
     dst.cell(r, 15).value = f"=J{r}-L{r}-N{r}"                     # Neto = SALDO-DET-RET
     if agente:
         dst.cell(r, 17).value = agente                            # AGENTE ADUANERO
+    # Los datos de relleno no van en negrita (la fila modelo de la plantilla la trae).
+    for c in range(1, _COL_LINK + 1):
+        _quitar_negrita(dst.cell(r, c))
     registro = str(f.get("REGISTRO") or "").strip()
     if sp_cfg and registro:
         url = sharepoint.link_factura(
