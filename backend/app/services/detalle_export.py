@@ -635,54 +635,81 @@ def _escribir_fila_agente(src, estilo_row, dst, r, f, ncols_src, sp_cfg, agente)
             cel.font = _LINK_FONT
 
 
+_MONEDA_ETIQUETA = {"SOL": "SOLES", "USD": "DOLARES"}
+
+
 def _construir_detalle_agentes_sheet(wb, grupos_agentes, nombre_por_oc, sp_cfg):
     """Reconstruye la hoja 'Detalle de agentes' con el detalle de todas las
-    facturas agrupadas por O/C, con un subtotal por grupo y un total general."""
+    facturas agrupadas por O/C. Se separa por moneda (SOLES primero, luego
+    DÓLARES), con un subtotal por O/C y un total por moneda."""
     if "Detalle de agentes" not in wb.sheetnames:
         return
     src = wb["Detalle de agentes"]
     ncols = 19
+    ncols_dst = _nc(ncols)
     header_row, data_style, subtotal_style = 2, 3, 6
 
     dst = wb.create_sheet("__agentes_tmp__")
     _copiar_anchos(src, dst)
 
-    # Cabecera (fila 2 de la plantilla), dejando la fila 1 en blanco.
-    dst_r = 2
-    _copiar_fila_desplazada(src, dst, header_row, dst_r, ncols, es_cabecera=True)
-    if src.row_dimensions[header_row].height:
-        dst.row_dimensions[dst_r].height = src.row_dimensions[header_row].height
-    dst_r += 1
+    # Agrupar por moneda: SOLES primero, DÓLARES después, resto al final.
+    por_moneda: dict[str, dict] = {}
+    for (oc, moneda), filas in grupos_agentes.items():
+        por_moneda.setdefault(moneda, {})[oc] = filas
+    orden = ["SOL", "USD"]
+    monedas = [m for m in orden if m in por_moneda] + [
+        m for m in por_moneda if m not in orden
+    ]
 
     alto = src.row_dimensions[data_style].height
-    subtotales: list[int] = []
-    for (oc, _moneda), filas in sorted(grupos_agentes.items()):
-        nombre = nombre_por_oc.get(oc, "")
-        data_ini = dst_r
-        for i, f in enumerate(filas):
-            _escribir_fila_agente(
-                src, data_style, dst, dst_r, f, ncols, sp_cfg,
-                nombre if i == 0 else None,
-            )
-            if alto:
-                dst.row_dimensions[dst_r].height = alto
-            dst_r += 1
-        data_fin = dst_r - 1
-        # Subtotal del grupo (Neto en columna O de la salida).
+    alto_sub = src.row_dimensions[subtotal_style].height
+    dst_r = 1
+    for moneda in monedas:
+        etiqueta = _MONEDA_ETIQUETA.get(moneda, moneda or "SIN MONEDA")
+        # Banda de título de la moneda (estilo de fila TOTAL).
         _copiar_fila_desplazada(src, dst, subtotal_style, dst_r, ncols)
-        if src.row_dimensions[subtotal_style].height:
-            dst.row_dimensions[dst_r].height = src.row_dimensions[subtotal_style].height
-        dst.cell(dst_r, 1).value = f"TOTAL {oc}"
-        dst.cell(dst_r, 15).value = f"=SUM(O{data_ini}:O{data_fin})"
-        dst.merge_cells(start_row=dst_r, start_column=1, end_row=dst_r, end_column=14)
-        subtotales.append(dst_r)
+        dst.cell(dst_r, 1).value = f"AGENTES DE ADUANAS {etiqueta}"
+        dst.cell(dst_r, 15).value = None
+        dst.merge_cells(start_row=dst_r, start_column=1, end_row=dst_r, end_column=ncols_dst)
         dst_r += 1
-
-    if subtotales:
+        # Cabecera.
+        _copiar_fila_desplazada(src, dst, header_row, dst_r, ncols, es_cabecera=True)
+        if src.row_dimensions[header_row].height:
+            dst.row_dimensions[dst_r].height = src.row_dimensions[header_row].height
+        dst_r += 1
+        # Grupos por O/C (ordenados).
+        subtotales: list[int] = []
+        for oc in sorted(por_moneda[moneda]):
+            filas = por_moneda[moneda][oc]
+            nombre = nombre_por_oc.get(oc, "")
+            data_ini = dst_r
+            for i, f in enumerate(filas):
+                _escribir_fila_agente(
+                    src, data_style, dst, dst_r, f, ncols, sp_cfg,
+                    nombre if i == 0 else None,
+                )
+                if alto:
+                    dst.row_dimensions[dst_r].height = alto
+                dst_r += 1
+            data_fin = dst_r - 1
+            _copiar_fila_desplazada(src, dst, subtotal_style, dst_r, ncols)
+            if alto_sub:
+                dst.row_dimensions[dst_r].height = alto_sub
+            dst.cell(dst_r, 1).value = (f"TOTAL {oc}").strip()
+            dst.cell(dst_r, 15).value = f"=SUM(O{data_ini}:O{data_fin})"
+            dst.merge_cells(start_row=dst_r, start_column=1, end_row=dst_r, end_column=14)
+            subtotales.append(dst_r)
+            dst_r += 1
+        # Total de la moneda.
         _copiar_fila_desplazada(src, dst, subtotal_style, dst_r, ncols)
-        dst.cell(dst_r, 1).value = "TOTAL GENERAL"
-        dst.cell(dst_r, 15).value = "=" + "+".join(f"O{r}" for r in subtotales)
+        if alto_sub:
+            dst.row_dimensions[dst_r].height = alto_sub
+        dst.cell(dst_r, 1).value = f"TOTAL {etiqueta}"
+        dst.cell(dst_r, 15).value = (
+            "=" + "+".join(f"O{r}" for r in subtotales) if subtotales else 0
+        )
         dst.merge_cells(start_row=dst_r, start_column=1, end_row=dst_r, end_column=14)
+        dst_r += 2  # línea en blanco de separación entre monedas
 
     pos_idx = wb.sheetnames.index("Detalle de agentes")
     del wb["Detalle de agentes"]
