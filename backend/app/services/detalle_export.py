@@ -313,15 +313,28 @@ def _detectar_seguros(ws: Worksheet) -> dict:
     return secciones
 
 
-def _escribir_resumen_agente(src, estilo_row, dst, r, nombre, ruc, oc, total, ncols_src):
+# Columna Neto en la hoja 'Detalle de agentes' (para las fórmulas de enlace).
+_COL_NETO_AG = 15
+
+
+def _ref_agentes(fila: int) -> str:
+    """Fórmula que jala el Neto de la hoja 'Detalle de agentes' (columna O)."""
+    col = get_column_letter(_COL_NETO_AG)
+    return f"=+'Detalle de agentes'!{col}{fila}"
+
+
+def _escribir_resumen_agente(
+    src, estilo_row, dst, r, nombre, ruc, oc, total, ncols_src, ref_row=None
+):
     """Fila resumen de la sección Agentes: nombre, RUC y O/C del agente y el
-    total (Neto) a depositar. Toma el estilo (desplazado) de la fila modelo."""
+    total (Neto) a depositar. Si se da `ref_row`, el total se enlaza por fórmula
+    a la hoja 'Detalle de agentes'; si no, se escribe el monto calculado."""
     _copiar_fila_desplazada(src, dst, estilo_row, r, ncols_src, ruc_val=None)
     for c in range(1, _COL_LINK + 1):
         dst.cell(r, c).value = None
     dst.cell(r, 1).value = nombre      # PROVEEDOR
     dst.cell(r, _COL_RUC).value = ruc  # RUC (del agente de la col A)
-    dst.cell(r, 16).value = total      # Neto (columna P)
+    dst.cell(r, 16).value = _ref_agentes(ref_row) if ref_row else total  # Neto (P)
     dst.cell(r, 17).value = nombre     # AGENTE ADUANERO
     dst.cell(r, 18).value = oc         # N° O/C-O/S
 
@@ -364,7 +377,7 @@ def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg) -> None:
 
 def _construir_detalle_sheet(
     wb, grupos, operaciones, fecha_inicio, fecha_final, sp_cfg,
-    grupos_agentes=None, nombre_por_oc=None, ruc_por_oc=None,
+    grupos_agentes=None, nombre_por_oc=None, ruc_por_oc=None, ref_agentes=None,
 ) -> dict:
     src = wb["Detalle"]
     # La plantilla tiene 19 columnas reales (hasta SUSTENTO). La salida tendrá 20
@@ -376,6 +389,7 @@ def _construir_detalle_sheet(
     grupos_agentes = grupos_agentes or {}
     nombre_por_oc = nombre_por_oc or {}
     ruc_por_oc = ruc_por_oc or {}
+    ref_agentes = ref_agentes or {"oc": {}, "moneda": {}}
     # Texto actual de cada operación (config de la app manda sobre la plantilla).
     op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
 
@@ -436,6 +450,7 @@ def _construir_detalle_sheet(
                         src, estilo_row, dst, dst_r,
                         nombre_por_oc.get(oc, ""), ruc_por_oc.get(oc, ""),
                         oc, total, ncols,
+                        ref_agentes["oc"].get((oc, moneda)),
                     )
                     if alto:
                         dst.row_dimensions[dst_r].height = alto
@@ -451,7 +466,13 @@ def _construir_detalle_sheet(
             if src.row_dimensions[total_row].height:
                 dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
             if resumen:
-                dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{data_fin})"
+                ref_total = ref_agentes["moneda"].get(moneda)
+                # El TOTAL de la sección jala el 'TOTAL <moneda>' del Detalle de
+                # agentes; si no hay referencia, suma las filas resumen locales.
+                dst.cell(dst_r, 16).value = (
+                    _ref_agentes(ref_total) if ref_total
+                    else f"=SUM(P{data_ini}:P{data_fin})"
+                )
             total_merges.append(dst_r)
             dst_r += 1
             src_r = total_row + 1
@@ -641,9 +662,15 @@ _MONEDA_ETIQUETA = {"SOL": "SOLES", "USD": "DOLARES"}
 def _construir_detalle_agentes_sheet(wb, grupos_agentes, nombre_por_oc, sp_cfg):
     """Reconstruye la hoja 'Detalle de agentes' con el detalle de todas las
     facturas agrupadas por O/C. Se separa por moneda (SOLES primero, luego
-    DÓLARES), con un subtotal por O/C y un total por moneda."""
+    DÓLARES), con un subtotal por O/C y un total por moneda.
+
+    Devuelve las filas (en la columna Neto = O) de cada subtotal para que el
+    'Detalle' pueda enlazarlas con fórmulas:
+      {"oc": {(oc, moneda): fila}, "moneda": {moneda: fila_total}}
+    """
+    ref = {"oc": {}, "moneda": {}}
     if "Detalle de agentes" not in wb.sheetnames:
-        return
+        return ref
     src = wb["Detalle de agentes"]
     ncols = 19
     ncols_dst = _nc(ncols)
@@ -699,6 +726,7 @@ def _construir_detalle_agentes_sheet(wb, grupos_agentes, nombre_por_oc, sp_cfg):
             dst.cell(dst_r, 15).value = f"=SUM(O{data_ini}:O{data_fin})"
             dst.merge_cells(start_row=dst_r, start_column=1, end_row=dst_r, end_column=14)
             subtotales.append(dst_r)
+            ref["oc"][(oc, moneda)] = dst_r
             dst_r += 1
         # Total de la moneda.
         _copiar_fila_desplazada(src, dst, subtotal_style, dst_r, ncols)
@@ -709,6 +737,7 @@ def _construir_detalle_agentes_sheet(wb, grupos_agentes, nombre_por_oc, sp_cfg):
             "=" + "+".join(f"O{r}" for r in subtotales) if subtotales else 0
         )
         dst.merge_cells(start_row=dst_r, start_column=1, end_row=dst_r, end_column=14)
+        ref["moneda"][moneda] = dst_r
         dst_r += 2  # línea en blanco de separación entre monedas
 
     pos_idx = wb.sheetnames.index("Detalle de agentes")
@@ -718,6 +747,7 @@ def _construir_detalle_agentes_sheet(wb, grupos_agentes, nombre_por_oc, sp_cfg):
         "Detalle de agentes",
         offset=pos_idx - wb.sheetnames.index("Detalle de agentes"),
     )
+    return ref
 
 
 def construir_detalle(
@@ -748,12 +778,16 @@ def construir_detalle(
         grupos.setdefault(pos, []).append(f)
 
     operaciones = data.get("operaciones", [])
+    # Primero 'Detalle de agentes' (para conocer las filas de sus totales) y
+    # luego 'Detalle', que enlaza sus resúmenes con fórmulas a esa hoja.
+    ref_agentes = _construir_detalle_agentes_sheet(
+        wb, grupos_agentes, nombre_por_oc, sharepoint_cfg
+    )
     total_rows = _construir_detalle_sheet(
         wb, grupos, operaciones, fecha_inicio, fecha_final, sharepoint_cfg,
-        grupos_agentes, nombre_por_oc, ruc_por_oc,
+        grupos_agentes, nombre_por_oc, ruc_por_oc, ref_agentes,
     )
     _rellenar_resumen(wb, total_rows, operaciones)
-    _construir_detalle_agentes_sheet(wb, grupos_agentes, nombre_por_oc, sharepoint_cfg)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(output_path)
