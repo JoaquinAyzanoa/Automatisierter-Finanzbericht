@@ -257,7 +257,7 @@ def _copiar_anchos(src, dst) -> None:
         except Exception:
             continue
         dst.column_dimensions[get_column_letter(_nc(idx))].width = dim.width
-    dst.column_dimensions[get_column_letter(_COL_RUC)].width = 13  # RUC
+    dst.column_dimensions[get_column_letter(_COL_RUC)].width = 16  # RUC
 
 
 # Anchos de las columnas numéricas del 'Detalle' (para que no salgan "######").
@@ -683,7 +683,7 @@ _MONEDA_ETIQUETA = {"SOL": "SOLES", "USD": "DOLARES"}
 # Anchos de la hoja 'Detalle de agentes'.
 # - Fijos: columnas numéricas / de fórmula / fechas.
 _ANCHOS_FIJOS_AG = {
-    2: 13, 3: 6, 5: 13, 6: 13, 7: 13, 8: 12, 9: 11, 10: 12,
+    2: 16, 3: 6, 5: 13, 6: 13, 7: 13, 8: 12, 9: 11, 10: 12,
     11: 8, 12: 12, 13: 8, 14: 11, 15: 12, 20: 14,
 }
 # - Auto (por contenido) con (mínimo, máximo): columnas de texto.
