@@ -12,6 +12,7 @@ from app.api.v1.endpoints import (
     proveedores,
     reporteador,
     reports,
+    retencion,
     sharepoint,
 )
 
@@ -25,6 +26,7 @@ api_router.include_router(merge.router)
 api_router.include_router(operaciones.router)
 api_router.include_router(sharepoint.router)
 api_router.include_router(agentes.router)
+api_router.include_router(retencion.router)
 api_router.include_router(informes.router)
 api_router.include_router(procesos.router)
 api_router.include_router(finance.router)

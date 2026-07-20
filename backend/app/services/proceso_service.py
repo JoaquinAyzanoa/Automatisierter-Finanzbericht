@@ -12,6 +12,7 @@ from app.repositories.proceso_repository import ProcesoRepository
 from app.services import clasificacion_service, detalle_export, merge_service
 from app.services.agente_config_service import AgenteConfigService
 from app.services.excel_utils import ProcesamientoError
+from app.services.retencion_config_service import RetencionConfigService
 from app.services.sharepoint_config_service import SharepointConfigService
 
 DESCARGA_FILENAME = "informe_clasificado.xlsx"
@@ -134,4 +135,5 @@ class ProcesoService:
             sharepoint_cfg,
             agente_svc.as_list(),
             agente_svc.relacionados_list(),
+            RetencionConfigService(self.db).as_dict(),
         )

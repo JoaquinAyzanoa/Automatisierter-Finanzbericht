@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   guardarAgentesConfig,
+  guardarRetencionConfig,
   guardarSharepointConfig,
   listarOperaciones,
   obtenerAgentesConfig,
+  obtenerRetencionConfig,
   obtenerSharepointConfig,
   reemplazarOperaciones,
   type Ambito,
@@ -67,6 +69,13 @@ export function Configuracion() {
   const [agSaving, setAgSaving] = useState(false);
   const [agDirty, setAgDirty] = useState(false);
   const [agSaved, setAgSaved] = useState(false);
+
+  // ---- Retención ----
+  const [retRucs, setRetRucs] = useState<string[]>([]);
+  const [retTC, setRetTC] = useState("3.75");
+  const [retSaving, setRetSaving] = useState(false);
+  const [retDirty, setRetDirty] = useState(false);
+  const [retSaved, setRetSaved] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -132,6 +141,64 @@ export function Configuracion() {
       cancelled = true;
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    obtenerRetencionConfig(token)
+      .then((cfg) => {
+        if (!cancelled) {
+          setRetRucs(cfg.rucs ?? []);
+          setRetTC(String(cfg.tipo_cambio ?? 3.75));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError("No se pudo cargar la configuración de retención.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  function marcarRet() {
+    setRetDirty(true);
+    setRetSaved(false);
+  }
+
+  function setRetRuc(index: number, valor: string) {
+    setRetRucs((prev) => prev.map((r, i) => (i === index ? valor : r)));
+    marcarRet();
+  }
+
+  function agregarRetRuc() {
+    setRetRucs((prev) => [...prev, ""]);
+    marcarRet();
+  }
+
+  function quitarRetRuc(index: number) {
+    setRetRucs((prev) => prev.filter((_, i) => i !== index));
+    marcarRet();
+  }
+
+  async function guardarRetencion() {
+    if (!token) return;
+    setRetSaving(true);
+    setError(null);
+    try {
+      const cfg = await guardarRetencionConfig(token, {
+        rucs: retRucs.map((r) => r.trim()).filter((r) => r),
+        tipo_cambio: parseFloat(retTC) || 3.75,
+      });
+      setRetRucs(cfg.rucs ?? []);
+      setRetTC(String(cfg.tipo_cambio ?? 3.75));
+      setRetDirty(false);
+      setRetSaved(true);
+    } catch {
+      setError("No se pudo guardar la configuración de retención.");
+    } finally {
+      setRetSaving(false);
+    }
+  }
 
   function setMes(n: string, valor: string) {
     setSpMeses((prev) => ({ ...prev, [n]: valor }));
@@ -548,6 +615,87 @@ export function Configuracion() {
             disabled={!agDirty || agSaving}
           >
             {agSaving ? "Guardando…" : "Guardar agentes"}
+          </button>
+        </div>
+      </div>
+
+      <div className="config__container">
+        <div className="config__containerHead">
+          <h3>Retención</h3>
+          <button type="button" className="config__add" onClick={agregarRetRuc}>
+            + Agregar
+          </button>
+        </div>
+
+        <p className="config__spHint">
+          Se retiene el <strong>3% del IMPORTE</strong> a las facturas de bienes
+          que superan <strong>S/ 700</strong> (o su equivalente en dólares según
+          el tipo de cambio). No se retiene si la factura tiene detracción (es
+          servicio) ni a los proveedores de la lista (agentes de retención).
+        </p>
+
+        <div className="config__spField">
+          <label htmlFor="ret-tc">Tipo de cambio (USD → S/)</label>
+          <input
+            id="ret-tc"
+            type="number"
+            step="0.001"
+            min="0"
+            className="config__text"
+            placeholder="3.75"
+            value={retTC}
+            onChange={(e) => {
+              setRetTC(e.target.value);
+              marcarRet();
+            }}
+          />
+        </div>
+
+        <p className="config__spHint">
+          RUCs de proveedores que son agentes de retención (a ellos no se les
+          retiene):
+        </p>
+
+        {retRucs.length === 0 ? (
+          <p className="config__empty">
+            No hay proveedores exceptuados. Usa «Agregar» para añadir un RUC.
+          </p>
+        ) : (
+          <ul className="config__list">
+            {retRucs.map((ruc, index) => (
+              <li key={index} className="config__row">
+                <span className="config__label">Exceptuado {index + 1}</span>
+                <input
+                  type="text"
+                  className="config__text"
+                  placeholder="RUC del agente de retención (11 dígitos)"
+                  value={ruc}
+                  onChange={(e) => setRetRuc(index, e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="config__delete"
+                  onClick={() => quitarRetRuc(index)}
+                  aria-label={`Eliminar Exceptuado ${index + 1}`}
+                >
+                  {trashIcon}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="config__actions">
+          {retSaved && !retDirty && (
+            <span className="config__saved">Cambios guardados</span>
+          )}
+          <button
+            type="button"
+            className="config__save"
+            onClick={guardarRetencion}
+            disabled={!retDirty || retSaving}
+          >
+            {retSaving ? "Guardando…" : "Guardar retención"}
           </button>
         </div>
       </div>

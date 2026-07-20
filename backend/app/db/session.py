@@ -46,6 +46,7 @@ def init_db() -> None:
     import app.models.operacion  # noqa: F401
     import app.models.proceso  # noqa: F401
     import app.models.report  # noqa: F401
+    import app.models.retencion_config  # noqa: F401
     import app.models.sharepoint_config  # noqa: F401
     import app.models.user  # noqa: F401
 

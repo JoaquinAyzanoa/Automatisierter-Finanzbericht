@@ -351,6 +351,43 @@ export async function guardarAgentesConfig(
   return (await res.json()) as AgentesConfig;
 }
 
+// ---- Retención ------------------------------------------------------------
+
+export interface RetencionConfig {
+  rucs: string[];
+  tipo_cambio: number;
+}
+
+export async function obtenerRetencionConfig(
+  token: string
+): Promise<RetencionConfig> {
+  const res = await fetch(`${BASE}/retencion`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as RetencionConfig;
+}
+
+export async function guardarRetencionConfig(
+  token: string,
+  config: RetencionConfig
+): Promise<RetencionConfig> {
+  const res = await fetch(`${BASE}/retencion`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as RetencionConfig;
+}
+
 // ---- Procesos / Historial -------------------------------------------------
 
 export interface ProcesoResumen {

@@ -88,6 +88,32 @@ def _key_prov(f) -> str:
     return str(f.get("PROVEEDOR", "")).strip().upper()
 
 
+# Retención de IGV (SUNAT): 3% del IMPORTE en facturas de bienes que superan
+# S/ 700 (o su equivalente en dólares). Valores fijos por norma.
+_TASA_RETENCION = 3.0
+_UMBRAL_RETENCION = 700.0
+
+
+def _pct_retencion(f: dict, ret_cfg: dict | None) -> float:
+    """% de retención de una factura (0 si no aplica).
+
+    - Con detracción (%DET > 0) -> 0: es un servicio, no un bien.
+    - Proveedor que es agente de retención -> 0 (excepción configurada).
+    - IMPORTE (convertido a soles) que no supera S/ 700 -> 0.
+    - En otro caso -> 3%.
+    """
+    if not ret_cfg:
+        return 0.0
+    if _num(f.get("DETRACCION")) > 0:
+        return 0.0
+    if _norm_ruc(f.get("RUC", "")) in (ret_cfg.get("rucs") or set()):
+        return 0.0
+    importe = _num(f.get("IMPORTE"))
+    if str(f.get("MONEDA", "")).strip().upper() != "SOL":
+        importe *= float(ret_cfg.get("tipo_cambio") or 0)
+    return _TASA_RETENCION if importe > _UMBRAL_RETENCION else 0.0
+
+
 def _clonar_estilo(d, s) -> None:
     if s.has_style:
         d._style = copy(s._style)
@@ -104,7 +130,7 @@ def _quitar_negrita(cell) -> None:
         )
 
 
-def _valores_fila(f: dict) -> dict:
+def _valores_fila(f: dict, ret_cfg: dict | None = None) -> dict:
     """Valores por columna (SALIDA, 1-based) para una fila del Detalle."""
     importe = round(_num(f.get("IMPORTE")), 2)
     pagado = round(_num(f.get("PAGADO")), 2)
@@ -114,18 +140,19 @@ def _valores_fila(f: dict) -> dict:
     vals = {i: (_fecha(f.get(k)) if i in _FECHA_COLS else f.get(k, "")) for i, k in _TXT.items()}
     vals[_COL_RUC] = _norm_ruc(f.get("RUC", ""))
     vals[3] = _fmt_tipo(f.get("TIPO", ""))  # TIPO: "1" -> "01"
-    # %DET como fracción (12 -> 0.12) para que Excel muestre "12 %".
+    # %DET y %RET como fracción (12 -> 0.12) para que Excel muestre "12 %".
     # RET y Neto se escriben como fórmulas (ver _escribir_fila).
     vals.update({8: importe, 9: pagado, 10: saldo, 12: p_det / 100, 13: det})
+    vals[14] = _pct_retencion(f, ret_cfg) / 100  # %RET
     return vals
 
 
-def _neto(f: dict) -> float:
-    """Neto numérico de una fila, replicando la fórmula del Detalle (RET=0, pues
-    el %RET no viene en los datos):
+def _neto(f: dict, ret_cfg: dict | None = None) -> float:
+    """Neto numérico de una fila, replicando la fórmula del Detalle:
       si DET>0 y |PAGADO-DET|<1  -> SALDO
       si DET>0 y PAGADO=0        -> SALDO-DET
       en otro caso               -> SALDO
+    y luego se le resta la retención (RET = %RET * IMPORTE).
     """
     importe = round(_num(f.get("IMPORTE")), 2)
     saldo = round(_num(f.get("SALDO")), 2)
@@ -137,7 +164,8 @@ def _neto(f: dict) -> float:
         base = saldo - det
     else:
         base = saldo
-    return round(base, 2)
+    ret = round(importe * _pct_retencion(f, ret_cfg) / 100, 2)
+    return round(base - ret, 2)
 
 
 # Marcador cuando la O/C se consolida por un proveedor relacionado / TIPO 21
@@ -367,10 +395,10 @@ def _escribir_resumen_agente(
     dst.cell(r, 18).value = oc         # N° O/C-O/S
 
 
-def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg) -> None:
+def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=None) -> None:
     """Escribe una fila de datos del Detalle en `r`, con el estilo (desplazado)
     de `estilo_row`."""
-    vals = _valores_fila(fila)
+    vals = _valores_fila(fila, ret_cfg)
     _clonar_estilo(dst.cell(r, 1), src.cell(estilo_row, 1))
     dst.cell(r, 1).value = vals.get(1)
     _clonar_estilo(dst.cell(r, _COL_RUC), src.cell(estilo_row, 2))  # RUC (estilo TIPO)
@@ -423,6 +451,7 @@ def _titulo_operacion(pos, texto, moneda) -> str:
 def _construir_detalle_sheet(
     wb, grupos, operaciones, fecha_inicio, fecha_final, sp_cfg,
     grupos_agentes=None, nombre_por_oc=None, ruc_por_oc=None, ref_agentes=None,
+    ret_cfg=None,
 ) -> dict:
     src = wb["Detalle"]
     # La plantilla tiene 19 columnas reales (hasta SUSTENTO). La salida tendrá 20
@@ -459,7 +488,7 @@ def _construir_detalle_sheet(
             if filas:
                 alto = src.row_dimensions[estilo_row].height
                 for f in filas:
-                    _escribir_fila(src, estilo_row, dst, dst_r, f, ncols, sp_cfg)
+                    _escribir_fila(src, estilo_row, dst, dst_r, f, ncols, sp_cfg, ret_cfg)
                     if alto:
                         dst.row_dimensions[dst_r].height = alto
                     dst_r += 1
@@ -494,7 +523,7 @@ def _construir_detalle_sheet(
             if resumen:
                 alto = src.row_dimensions[estilo_row].height
                 for oc, filas in resumen:
-                    total = round(sum(_neto(f) for f in filas), 2)
+                    total = round(sum(_neto(f, ret_cfg) for f in filas), 2)
                     _escribir_resumen_agente(
                         src, estilo_row, dst, dst_r,
                         nombre_por_oc.get(oc, ""), ruc_por_oc.get(oc, ""),
@@ -588,7 +617,7 @@ def _construir_detalle_sheet(
             data_ini = dst_r
             alto = src.row_dimensions[m_data].height
             for f in filas:
-                _escribir_fila(src, m_data, dst, dst_r, f, ncols, sp_cfg)
+                _escribir_fila(src, m_data, dst, dst_r, f, ncols, sp_cfg, ret_cfg)
                 if alto:
                     dst.row_dimensions[dst_r].height = alto
                 dst_r += 1
@@ -661,7 +690,7 @@ _TXT_AG = {
 }
 
 
-def _valores_fila_ag(f: dict) -> dict:
+def _valores_fila_ag(f: dict, ret_cfg: dict | None = None) -> dict:
     """Valores por columna (SALIDA) para una fila de 'Detalle de agentes'."""
     importe = round(_num(f.get("IMPORTE")), 2)
     pagado = round(_num(f.get("PAGADO")), 2)
@@ -675,12 +704,15 @@ def _valores_fila_ag(f: dict) -> dict:
     vals[_COL_RUC] = _norm_ruc(f.get("RUC", ""))
     vals[3] = _fmt_tipo(f.get("TIPO", ""))  # TIPO: "1" -> "01"
     vals.update({8: importe, 9: pagado, 10: saldo, 11: p_det / 100, 12: det})
+    vals[13] = _pct_retencion(f, ret_cfg) / 100  # %RET
     return vals
 
 
-def _escribir_fila_agente(src, estilo_row, dst, r, f, ncols_src, sp_cfg, agente):
+def _escribir_fila_agente(
+    src, estilo_row, dst, r, f, ncols_src, sp_cfg, agente, ret_cfg=None
+):
     """Escribe una factura en la hoja 'Detalle de agentes' (con columna RUC)."""
-    vals = _valores_fila_ag(f)
+    vals = _valores_fila_ag(f, ret_cfg)
     _clonar_estilo(dst.cell(r, 1), src.cell(estilo_row, 1))
     dst.cell(r, 1).value = vals.get(1)
     _clonar_estilo(dst.cell(r, _COL_RUC), src.cell(estilo_row, 2))  # RUC (estilo TIPO)
@@ -738,7 +770,9 @@ def _ajustar_anchos_agentes(dst, max_row: int) -> None:
         dst.column_dimensions[get_column_letter(c)].width = min(max(maxlen + 2, lo), hi)
 
 
-def _construir_detalle_agentes_sheet(wb, grupos_agentes, nombre_por_oc, sp_cfg):
+def _construir_detalle_agentes_sheet(
+    wb, grupos_agentes, nombre_por_oc, sp_cfg, ret_cfg=None
+):
     """Reconstruye la hoja 'Detalle de agentes' con el detalle de todas las
     facturas agrupadas por O/C. Se separa por moneda (SOLES primero, luego
     DÓLARES), con un subtotal por O/C y un total por moneda.
@@ -795,7 +829,7 @@ def _construir_detalle_agentes_sheet(wb, grupos_agentes, nombre_por_oc, sp_cfg):
             for i, f in enumerate(filas):
                 _escribir_fila_agente(
                     src, data_style, dst, dst_r, f, ncols, sp_cfg,
-                    nombre if i == 0 else None,
+                    nombre if i == 0 else None, ret_cfg,
                 )
                 if alto:
                     dst.row_dimensions[dst_r].height = alto
@@ -842,8 +876,19 @@ def construir_detalle(
     sharepoint_cfg: dict | None = None,
     agente_rucs: list[str] | None = None,
     relacionados_rucs: list[str] | None = None,
+    retencion_cfg: dict | None = None,
 ) -> Path:
     wb = openpyxl.load_workbook(_PLANTILLA)
+
+    # Config de retención: RUCs exceptuados (agentes de retención) + tipo de cambio.
+    ret_cfg = {
+        "rucs": {
+            _norm_ruc(r)
+            for r in ((retencion_cfg or {}).get("rucs") or [])
+            if str(r).strip()
+        },
+        "tipo_cambio": (retencion_cfg or {}).get("tipo_cambio") or 0,
+    }
 
     # Agrupar por O/C las facturas que incluyen a un agente o proveedor
     # relacionado. Esas filas salen de su Operación normal (van solo a 'Agentes
@@ -865,11 +910,11 @@ def construir_detalle(
     # Primero 'Detalle de agentes' (para conocer las filas de sus totales) y
     # luego 'Detalle', que enlaza sus resúmenes con fórmulas a esa hoja.
     ref_agentes = _construir_detalle_agentes_sheet(
-        wb, grupos_agentes, nombre_por_oc, sharepoint_cfg
+        wb, grupos_agentes, nombre_por_oc, sharepoint_cfg, ret_cfg
     )
     total_rows = _construir_detalle_sheet(
         wb, grupos, operaciones, fecha_inicio, fecha_final, sharepoint_cfg,
-        grupos_agentes, nombre_por_oc, ruc_por_oc, ref_agentes,
+        grupos_agentes, nombre_por_oc, ruc_por_oc, ref_agentes, ret_cfg,
     )
     _rellenar_resumen(wb, total_rows, operaciones)
 
