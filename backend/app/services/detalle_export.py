@@ -413,9 +413,10 @@ def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=Non
         d.value = vals.get(_nc(c))
     # DET con dos decimales.
     dst.cell(r, _COL_DET).number_format = _DET_FMT
-    # %RET como porcentaje (mismo formato que %DET); RET = %RET * IMPORTE.
+    # %RET como porcentaje (mismo formato que %DET); RET = %RET * IMPORTE (2 dec).
     dst.cell(r, 14).number_format = dst.cell(r, 12).number_format
-    dst.cell(r, 15).value = f"=N{r}*H{r}"
+    dst.cell(r, 15).value = f"=ROUND(N{r}*H{r},2)"
+    dst.cell(r, 15).number_format = _DET_FMT
     # Neto (fórmula viva): SALDO(J), DET(M), PAGADO(I), RET(O).
     dst.cell(r, 16).value = (
         f"=IF(AND(M{r}>0,ABS(I{r}-M{r})<1),J{r},"
@@ -727,7 +728,8 @@ def _escribir_fila_agente(
         d.value = vals.get(_nc(c))
     dst.cell(r, 12).number_format = _DET_FMT                       # DET
     dst.cell(r, 13).number_format = dst.cell(r, 11).number_format  # %RET como %DET
-    dst.cell(r, 14).value = f"=M{r}*H{r}"                          # RET = %RET*IMPORTE
+    dst.cell(r, 14).value = f"=ROUND(M{r}*H{r},2)"                 # RET = %RET*IMPORTE (2 dec)
+    dst.cell(r, 14).number_format = _DET_FMT
     dst.cell(r, 15).value = f"=J{r}-L{r}-N{r}"                     # Neto = SALDO-DET-RET
     if agente:
         dst.cell(r, 17).value = agente                            # AGENTE ADUANERO
