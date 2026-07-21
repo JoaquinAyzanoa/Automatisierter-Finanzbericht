@@ -102,7 +102,7 @@ def _pct_retencion(f: dict, ret_cfg: dict | None) -> float:
     - IMPORTE (convertido a soles) que no supera S/ 700 -> 0.
     - En otro caso -> 3%.
     """
-    if not ret_cfg:
+    if not ret_cfg or not ret_cfg.get("activo"):
         return 0.0
     if _num(f.get("DETRACCION")) > 0:
         return 0.0
@@ -880,8 +880,9 @@ def construir_detalle(
 ) -> Path:
     wb = openpyxl.load_workbook(_PLANTILLA)
 
-    # Config de retención: RUCs exceptuados (agentes de retención) + tipo de cambio.
+    # Config de retención: interruptor + RUCs exceptuados + tipo de cambio.
     ret_cfg = {
+        "activo": bool((retencion_cfg or {}).get("activo")),
         "rucs": {
             _norm_ruc(r)
             for r in ((retencion_cfg or {}).get("rucs") or [])

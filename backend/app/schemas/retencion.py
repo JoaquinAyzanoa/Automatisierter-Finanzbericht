@@ -6,6 +6,8 @@ class RetencionConfigSchema(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    # Prende/apaga el cálculo de la retención.
+    activo: bool = True
     # RUCs de proveedores que son agentes de retención (no se les retiene).
     rucs: list[str] = []
     # Tipo de cambio para convertir importes en dólares a soles (umbral S/ 700).

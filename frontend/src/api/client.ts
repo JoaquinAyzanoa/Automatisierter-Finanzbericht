@@ -354,6 +354,7 @@ export async function guardarAgentesConfig(
 // ---- Retención ------------------------------------------------------------
 
 export interface RetencionConfig {
+  activo: boolean;
   rucs: string[];
   tipo_cambio: number;
 }

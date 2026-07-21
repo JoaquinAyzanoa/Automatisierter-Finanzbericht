@@ -71,6 +71,7 @@ export function Configuracion() {
   const [agSaved, setAgSaved] = useState(false);
 
   // ---- Retención ----
+  const [retActivo, setRetActivo] = useState(true);
   const [retRucs, setRetRucs] = useState<string[]>([]);
   const [retTC, setRetTC] = useState("3.75");
   const [retSaving, setRetSaving] = useState(false);
@@ -148,6 +149,7 @@ export function Configuracion() {
     obtenerRetencionConfig(token)
       .then((cfg) => {
         if (!cancelled) {
+          setRetActivo(cfg.activo ?? true);
           setRetRucs(cfg.rucs ?? []);
           setRetTC(String(cfg.tipo_cambio ?? 3.75));
         }
@@ -186,9 +188,11 @@ export function Configuracion() {
     setError(null);
     try {
       const cfg = await guardarRetencionConfig(token, {
+        activo: retActivo,
         rucs: retRucs.map((r) => r.trim()).filter((r) => r),
         tipo_cambio: parseFloat(retTC) || 3.75,
       });
+      setRetActivo(cfg.activo ?? true);
       setRetRucs(cfg.rucs ?? []);
       setRetTC(String(cfg.tipo_cambio ?? 3.75));
       setRetDirty(false);
@@ -622,11 +626,36 @@ export function Configuracion() {
       <div className="config__container">
         <div className="config__containerHead">
           <h3>Retención</h3>
-          <button type="button" className="config__add" onClick={agregarRetRuc}>
-            + Agregar
-          </button>
+          {retActivo && (
+            <button type="button" className="config__add" onClick={agregarRetRuc}>
+              + Agregar
+            </button>
+          )}
         </div>
 
+        <div className="config__spField">
+          <label htmlFor="ret-activo">Aplicar retención</label>
+          <select
+            id="ret-activo"
+            className="config__filtroSelect"
+            value={retActivo ? "si" : "no"}
+            onChange={(e) => {
+              setRetActivo(e.target.value === "si");
+              marcarRet();
+            }}
+          >
+            <option value="si">Sí, calcular retención</option>
+            <option value="no">No aplicar retención</option>
+          </select>
+        </div>
+
+        {!retActivo ? (
+          <p className="config__spHint">
+            La retención está <strong>desactivada</strong>: %RET y RET quedan en 0.
+            Actívala para volver a calcularla.
+          </p>
+        ) : (
+        <>
         <p className="config__spHint">
           Se retiene el <strong>3% del IMPORTE</strong> a las facturas de bienes
           que superan <strong>S/ 700</strong> (o su equivalente en dólares según
@@ -683,6 +712,8 @@ export function Configuracion() {
               </li>
             ))}
           </ul>
+        )}
+        </>
         )}
 
         <div className="config__actions">

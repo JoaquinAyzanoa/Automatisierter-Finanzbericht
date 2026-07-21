@@ -64,6 +64,9 @@ def init_db() -> None:
     _ensure_column(
         "agente_aduana_config", "relacionados", "TEXT NOT NULL DEFAULT '[]'"
     )
+    _ensure_column(
+        "retencion_config", "activo", "BOOLEAN NOT NULL DEFAULT 1"
+    )
 
 
 def get_session() -> Session:
