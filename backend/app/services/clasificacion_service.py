@@ -60,19 +60,36 @@ def _ambito_fila(ruc) -> str:
     return "Nacional" if es_ruc_nacional(ruc) else "Exterior"
 
 
+# Tag especial que matchea contra la columna TIPO (ej. "tipo:02" para recibos
+# por honorarios), en vez de buscar el texto en toda la fila.
+_TIPO_TAG_RE = re.compile(r"^tipo\s*[:=]\s*(\w+)$", re.IGNORECASE)
+
+
+def _norm_tipo(v) -> str:
+    s = re.sub(r"\.0$", "", str(v).strip())
+    return "0" + s if s.isdigit() and len(s) == 1 else s
+
+
 def _posicion_por_tags(
-    contenido: str, row_moneda: str, row_ambito: str, operaciones
+    contenido: str, row_moneda: str, row_tipo: str, operaciones
 ) -> int | None:
-    """Si algún tag de una categoría (con misma moneda/ámbito que la fila)
-    aparece en el contenido, devuelve su posición. Prevalece sobre lo demás."""
+    """Si algún tag de una categoría (con la misma moneda) coincide, devuelve su
+    posición. Prevalece sobre lo demás e IGNORA el ámbito, para que un RUC
+    etiquetado se respete 'sí o sí'. Un tag 'tipo:NN' matchea contra la columna
+    TIPO (ej. 'tipo:02' = recibos por honorarios); el resto busca el texto en el
+    contenido de la fila."""
     for i, op in enumerate(operaciones):
         if str(op.moneda).strip().upper() != row_moneda:
             continue
-        if str(op.ambito).strip() != row_ambito:
-            continue
         for tag in op.tags or []:
-            t = str(tag).strip().lower()
-            if t and t in contenido:
+            t = str(tag).strip()
+            if not t:
+                continue
+            m = _TIPO_TAG_RE.match(t)
+            if m:
+                if _norm_tipo(row_tipo) == _norm_tipo(m.group(1)):
+                    return i + 1
+            elif t.lower() in contenido:
                 return i + 1
     return None
 
@@ -153,6 +170,7 @@ def clasificar_merge(path: Path, operaciones: list[Operacion]) -> dict:
 
     ruc_col = _resolve_col(df, "RUC")
     moneda_col = _resolve_col(df, "MONEDA")
+    tipo_col = _resolve_col(df, "TIPO")
     fecha_col = _resolve_fecha_col(df)
     iso_list = _fechas_iso(df, fecha_col) if fecha_col else None
     n = len(operaciones)
@@ -161,12 +179,12 @@ def clasificar_merge(path: Path, operaciones: list[Operacion]) -> dict:
     for idx, rec in enumerate(filas):
         ruc = rec.get(ruc_col, "") if ruc_col else ""
         moneda = rec.get(moneda_col, "") if moneda_col else ""
+        tipo = rec.get(tipo_col, "") if tipo_col else ""
         contenido = " ".join(str(v) for v in rec.values()).lower()
         row_moneda = str(moneda).strip().upper()
-        row_ambito = _ambito_fila(ruc)
 
-        # Los tags prevalecen (respetando moneda/ámbito de la categoría).
-        pos = _posicion_por_tags(contenido, row_moneda, row_ambito, operaciones)
+        # Los tags prevalecen (respetando la moneda; el ámbito no bloquea).
+        pos = _posicion_por_tags(contenido, row_moneda, tipo, operaciones)
         if pos is None:
             pos = _posicion_objetivo(ruc, moneda, operaciones)
 

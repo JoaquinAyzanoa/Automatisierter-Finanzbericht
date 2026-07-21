@@ -67,14 +67,6 @@ function mostrarCelda(valor: unknown): string {
   return m ? m[1] : s;
 }
 
-// RUC nacional: 11 dígitos que empiezan con 10 o 20.
-function esRucNacional(ruc: unknown): boolean {
-  const r = String(ruc ?? "")
-    .trim()
-    .replace(/\.0$/, "");
-  return r.length === 11 && /^\d+$/.test(r) && (r.startsWith("10") || r.startsWith("20"));
-}
-
 function normRuc(v: unknown): string {
   return String(v ?? "").trim().replace(/\.0$/, "");
 }
@@ -462,16 +454,14 @@ export function Informes({ procesoId }: Props) {
     }
   }
 
-  // Operaciones asignables a una fila: mismo ámbito (Nacional/Exterior) y, dentro,
-  // misma moneda.
+  // Operaciones asignables a una fila: de la misma moneda (el ámbito no limita,
+  // así un RUC etiquetado puede ir a una operación de otro ámbito).
   function opcionesDeFila(f: FilaInforme) {
     const rowMoneda = String(f["MONEDA"] ?? "").trim().toUpperCase();
-    const rowAmbito = esRucNacional(f["RUC"]) ? "Nacional" : "Exterior";
-    const porAmbito = operaciones.filter((o) => o.ambito === rowAmbito);
-    const porMoneda = porAmbito.filter(
+    const porMoneda = operaciones.filter(
       (o) => String(o.moneda).toUpperCase() === rowMoneda
     );
-    return porMoneda.length > 0 ? porMoneda : porAmbito;
+    return porMoneda.length > 0 ? porMoneda : operaciones;
   }
 
   function renderFila(f: FilaInforme): ReactNode {
