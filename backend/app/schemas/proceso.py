@@ -28,5 +28,7 @@ class GuardarProceso(BaseModel):
 
     fecha_inicio: str | None = None
     fecha_final: str | None = None
+    # Tipo de cambio (S/ por US$); si es None se mantiene el guardado.
+    tipo_cambio: float | None = None
     # id de fila (texto) -> posición de operación, o None para "Otros" (sin categoría).
     overrides: dict[str, int | None] = {}

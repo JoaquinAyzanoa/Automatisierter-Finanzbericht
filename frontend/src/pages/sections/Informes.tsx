@@ -130,6 +130,8 @@ export function Informes({ procesoId }: Props) {
   // Rango de fechas (para el botón Filtrar y para mostrar/guardar en el historial).
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFinal, setFechaFinal] = useState("");
+  // Tipo de cambio (S/ por US$): se usa para la retención y va al Resumen (C18).
+  const [tipoCambio, setTipoCambio] = useState("");
   const [otrosOpen, setOtrosOpen] = useState(false);
   // Buscador, filtros por columna y rango de fechas, propios de "Otros".
   const [otrosBusqueda, setOtrosBusqueda] = useState("");
@@ -172,6 +174,7 @@ export function Informes({ procesoId }: Props) {
         setOtrosFechaFinal("");
         setFechaInicio(d.fecha_inicio ?? "");
         setFechaFinal(d.fecha_final ?? "");
+        setTipoCambio(d.tipo_cambio != null ? String(d.tipo_cambio) : "");
         setCambios(0);
         setGuardado("idle");
       })
@@ -408,6 +411,7 @@ export function Informes({ procesoId }: Props) {
       guardarProceso(token, id, {
         fecha_inicio: fechaInicio || null,
         fecha_final: fechaFinal || null,
+        tipo_cambio: parseFloat(tipoCambio) || null,
         overrides,
       })
         .then((r) => {
@@ -441,6 +445,7 @@ export function Informes({ procesoId }: Props) {
       const blob = await guardarYDescargarProceso(token, data.id, {
         fecha_inicio: fechaInicio || null,
         fecha_final: fechaFinal || null,
+        tipo_cambio: parseFloat(tipoCambio) || null,
         overrides: Object.fromEntries(
           Object.entries(overrides).map(([k, v]) => [k, v])
         ),
@@ -661,6 +666,20 @@ export function Informes({ procesoId }: Props) {
               value={fechaFinal}
               min={fechaInicio || undefined}
               onChange={(e) => setFechaFinal(e.target.value)}
+            />
+          </label>
+          <label className="informes__field">
+            <span>Tipo de cambio</span>
+            <input
+              type="number"
+              step="0.001"
+              min="0"
+              placeholder="3.5"
+              value={tipoCambio}
+              onChange={(e) => {
+                setTipoCambio(e.target.value);
+                setCambios((c) => c + 1);
+              }}
             />
           </label>
         </div>

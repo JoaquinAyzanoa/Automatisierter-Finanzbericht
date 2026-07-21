@@ -73,7 +73,6 @@ export function Configuracion() {
   // ---- Retención ----
   const [retActivo, setRetActivo] = useState(true);
   const [retRucs, setRetRucs] = useState<string[]>([]);
-  const [retTC, setRetTC] = useState("3.75");
   const [retSaving, setRetSaving] = useState(false);
   const [retDirty, setRetDirty] = useState(false);
   const [retSaved, setRetSaved] = useState(false);
@@ -151,7 +150,6 @@ export function Configuracion() {
         if (!cancelled) {
           setRetActivo(cfg.activo ?? true);
           setRetRucs(cfg.rucs ?? []);
-          setRetTC(String(cfg.tipo_cambio ?? 3.75));
         }
       })
       .catch(() => {
@@ -190,11 +188,9 @@ export function Configuracion() {
       const cfg = await guardarRetencionConfig(token, {
         activo: retActivo,
         rucs: retRucs.map((r) => r.trim()).filter((r) => r),
-        tipo_cambio: parseFloat(retTC) || 3.75,
       });
       setRetActivo(cfg.activo ?? true);
       setRetRucs(cfg.rucs ?? []);
-      setRetTC(String(cfg.tipo_cambio ?? 3.75));
       setRetDirty(false);
       setRetSaved(true);
     } catch {
@@ -660,25 +656,9 @@ export function Configuracion() {
           Se retiene el <strong>3% del IMPORTE</strong> a las facturas de bienes
           que superan <strong>S/ 700</strong> (o su equivalente en dólares según
           el tipo de cambio). No se retiene si la factura tiene detracción (es
-          servicio) ni a los proveedores de la lista (agentes de retención).
+          servicio) ni a los proveedores de la lista (agentes de retención). El
+          <strong> tipo de cambio</strong> se edita en «Informes».
         </p>
-
-        <div className="config__spField">
-          <label htmlFor="ret-tc">Tipo de cambio (USD → S/)</label>
-          <input
-            id="ret-tc"
-            type="number"
-            step="0.001"
-            min="0"
-            className="config__text"
-            placeholder="3.75"
-            value={retTC}
-            onChange={(e) => {
-              setRetTC(e.target.value);
-              marcarRet();
-            }}
-          />
-        </div>
 
         <p className="config__spHint">
           RUCs de proveedores que son agentes de retención (a ellos no se les

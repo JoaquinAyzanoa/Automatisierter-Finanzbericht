@@ -93,6 +93,10 @@ def _key_prov(f) -> str:
 _TASA_RETENCION = 3.0
 _UMBRAL_RETENCION = 700.0
 
+# Tipo de cambio (S/ por US$) por defecto y su celda en el Resumen.
+TIPO_CAMBIO_DEFAULT = 3.5
+_CELDA_TIPO_CAMBIO = "C18"
+
 
 def _pct_retencion(f: dict, ret_cfg: dict | None) -> float:
     """% de retención de una factura (0 si no aplica).
@@ -877,8 +881,14 @@ def construir_detalle(
     agente_rucs: list[str] | None = None,
     relacionados_rucs: list[str] | None = None,
     retencion_cfg: dict | None = None,
+    tipo_cambio: float | None = None,
 ) -> Path:
     wb = openpyxl.load_workbook(_PLANTILLA)
+
+    tc = float(tipo_cambio) if tipo_cambio else TIPO_CAMBIO_DEFAULT
+    # El mismo tipo de cambio va al Resumen (celda del TOTAL CONSOLIDADO).
+    if "Resumen" in wb.sheetnames:
+        wb["Resumen"][_CELDA_TIPO_CAMBIO] = tc
 
     # Config de retención: interruptor + RUCs exceptuados + tipo de cambio.
     ret_cfg = {
@@ -888,7 +898,7 @@ def construir_detalle(
             for r in ((retencion_cfg or {}).get("rucs") or [])
             if str(r).strip()
         },
-        "tipo_cambio": (retencion_cfg or {}).get("tipo_cambio") or 0,
+        "tipo_cambio": tc,
     }
 
     # Agrupar por O/C las facturas que incluyen a un agente o proveedor

@@ -61,6 +61,7 @@ def init_db() -> None:
         "operaciones", "respeta_filtro", "BOOLEAN NOT NULL DEFAULT 1"
     )
     _ensure_column("procesos", "nombre", "TEXT")
+    _ensure_column("procesos", "tipo_cambio", "FLOAT")
     _ensure_column(
         "agente_aduana_config", "relacionados", "TEXT NOT NULL DEFAULT '[]'"
     )

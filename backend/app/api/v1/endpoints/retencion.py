@@ -16,6 +16,4 @@ def obtener(current_user: CurrentUser, db: DbSession) -> RetencionConfigSchema:
 def guardar(
     payload: RetencionConfigSchema, current_user: CurrentUser, db: DbSession
 ) -> RetencionConfigSchema:
-    return RetencionConfigService(db).save(
-        payload.activo, payload.rucs, payload.tipo_cambio
-    )
+    return RetencionConfigService(db).save(payload.activo, payload.rucs)

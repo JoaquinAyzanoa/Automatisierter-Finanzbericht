@@ -61,6 +61,9 @@ class ProcesoService:
             "updated_at": proceso.updated_at,
             "fecha_inicio": proceso.fecha_inicio,
             "fecha_final": proceso.fecha_final,
+            "tipo_cambio": proceso.tipo_cambio
+            if proceso.tipo_cambio
+            else detalle_export.TIPO_CAMBIO_DEFAULT,
             **data,
         }
 
@@ -92,6 +95,7 @@ class ProcesoService:
         fecha_inicio: str | None,
         fecha_final: str | None,
         overrides: dict[str, int | None],
+        tipo_cambio: float | None = None,
     ) -> Proceso:
         proceso = self.repo.get(proceso_id)
         if proceso is None:
@@ -111,6 +115,12 @@ class ProcesoService:
         proceso.payload = json.dumps(data, ensure_ascii=False)
         proceso.fecha_inicio = fecha_inicio or None
         proceso.fecha_final = fecha_final or None
+        if tipo_cambio is not None:
+            try:
+                tc = float(tipo_cambio)
+                proceso.tipo_cambio = tc if tc > 0 else None
+            except (TypeError, ValueError):
+                pass
         proceso.updated_at = datetime.now(timezone.utc)
         return self.repo.save(proceso)
 
@@ -121,8 +131,11 @@ class ProcesoService:
         fecha_inicio: str | None,
         fecha_final: str | None,
         overrides: dict[str, int],
+        tipo_cambio: float | None = None,
     ) -> Path:
-        proceso = self.guardar(proceso_id, fecha_inicio, fecha_final, overrides)
+        proceso = self.guardar(
+            proceso_id, fecha_inicio, fecha_final, overrides, tipo_cambio
+        )
         data = json.loads(proceso.payload)
         output_path = Path(settings.REPORTS_DIR) / DESCARGA_FILENAME
         sharepoint_cfg = SharepointConfigService(self.db).as_dict()
@@ -136,4 +149,5 @@ class ProcesoService:
             agente_svc.as_list(),
             agente_svc.relacionados_list(),
             RetencionConfigService(self.db).as_dict(),
+            proceso.tipo_cambio,
         )

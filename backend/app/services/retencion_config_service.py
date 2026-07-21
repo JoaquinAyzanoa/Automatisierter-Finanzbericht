@@ -23,7 +23,7 @@ class RetencionConfigService:
             self.db.refresh(cfg)
         return cfg
 
-    def save(self, activo, rucs: list[str], tipo_cambio) -> RetencionConfig:
+    def save(self, activo, rucs: list[str]) -> RetencionConfig:
         cfg = self.get()
         cfg.activo = bool(activo)
         limpios: list[str] = []
@@ -32,11 +32,6 @@ class RetencionConfigService:
             if n and n not in limpios:
                 limpios.append(n)
         cfg.rucs = limpios
-        try:
-            tc = float(tipo_cambio)
-        except (TypeError, ValueError):
-            tc = DEFAULT_TIPO_CAMBIO
-        cfg.tipo_cambio = tc if tc > 0 else DEFAULT_TIPO_CAMBIO
         self.db.commit()
         self.db.refresh(cfg)
         return cfg
@@ -46,5 +41,4 @@ class RetencionConfigService:
         return {
             "activo": bool(cfg.activo),
             "rucs": list(cfg.rucs or []),
-            "tipo_cambio": float(cfg.tipo_cambio or DEFAULT_TIPO_CAMBIO),
         }

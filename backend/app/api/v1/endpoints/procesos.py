@@ -80,6 +80,7 @@ def guardar(
             payload.fecha_inicio,
             payload.fecha_final,
             payload.overrides,
+            payload.tipo_cambio,
         )
     except ProcesoNotFoundError:
         raise HTTPException(
@@ -101,6 +102,7 @@ def descargar(
             payload.fecha_inicio,
             payload.fecha_final,
             payload.overrides,
+            payload.tipo_cambio,
         )
     except ProcesoNotFoundError:
         raise HTTPException(

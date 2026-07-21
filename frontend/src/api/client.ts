@@ -356,7 +356,6 @@ export async function guardarAgentesConfig(
 export interface RetencionConfig {
   activo: boolean;
   rucs: string[];
-  tipo_cambio: number;
 }
 
 export async function obtenerRetencionConfig(
@@ -426,6 +425,7 @@ export interface ProcesoDetalle extends MergeClasificado {
   updated_at: string;
   fecha_inicio: string | null;
   fecha_final: string | null;
+  tipo_cambio: number | null;
 }
 
 export async function crearProceso(token: string): Promise<{ id: string }> {
@@ -480,6 +480,7 @@ export async function guardarProceso(
   body: {
     fecha_inicio: string | null;
     fecha_final: string | null;
+    tipo_cambio?: number | null;
     overrides: Record<string, number | null>;
   }
 ): Promise<{ id: string; updated_at: string }> {
@@ -503,6 +504,7 @@ export async function guardarYDescargarProceso(
   body: {
     fecha_inicio: string | null;
     fecha_final: string | null;
+    tipo_cambio?: number | null;
     overrides: Record<string, number | null>;
   }
 ): Promise<Blob> {
