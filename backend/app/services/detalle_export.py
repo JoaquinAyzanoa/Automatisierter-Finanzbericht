@@ -284,6 +284,11 @@ def _centrar_horizontal(cell) -> None:
     )
 
 
+# Columnas de datos que van centradas horizontalmente (RUC, TIPO, N° DOCUMENTO,
+# FEC. REGISTRO, FEC.DOC, FEC.VCTO), mismo layout en Detalle y Detalle de agentes.
+_COLS_CENTRAR = range(2, 8)
+
+
 def _copiar_fila_desplazada(
     src, dst, src_r, dst_r, ncols_src, ruc_val=None, es_cabecera=False
 ) -> None:
@@ -411,6 +416,8 @@ def _escribir_resumen_agente(
     dst.cell(r, 16).value = _ref_agentes(ref_row) if ref_row else total  # Neto (P)
     dst.cell(r, 17).value = nombre     # AGENTE ADUANERO
     dst.cell(r, 18).value = oc         # N° O/C-O/S
+    for c in _COLS_CENTRAR:  # RUC y demás columnas de identificación: centradas
+        _centrar_horizontal(dst.cell(r, c))
 
 
 def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=None) -> None:
@@ -425,6 +432,8 @@ def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=Non
         d = dst.cell(r, _nc(c))
         _clonar_estilo(d, src.cell(estilo_row, c))
         d.value = vals.get(_nc(c))
+    for c in _COLS_CENTRAR:  # RUC, TIPO, N° DOC y fechas: centrados
+        _centrar_horizontal(dst.cell(r, c))
     # DET con dos decimales.
     dst.cell(r, _COL_DET).number_format = _DET_FMT
     # %RET como porcentaje (mismo formato que %DET); RET = %RET * IMPORTE (2 dec).
@@ -750,6 +759,8 @@ def _escribir_fila_agente(
     # Los datos de relleno no van en negrita (la fila modelo de la plantilla la trae).
     for c in range(1, _COL_LINK + 1):
         _quitar_negrita(dst.cell(r, c))
+    for c in _COLS_CENTRAR:  # RUC, TIPO, N° DOC y fechas: centrados
+        _centrar_horizontal(dst.cell(r, c))
     registro = str(f.get("REGISTRO") or "").strip()
     if sp_cfg and registro:
         url = sharepoint.link_factura(
