@@ -80,6 +80,12 @@ def _norm_ruc(ruc) -> str:
     return re.sub(r"\.0$", "", str(ruc).strip())
 
 
+def _es_ruc_nacional(ruc) -> bool:
+    """RUC nacional: 11 dígitos que empiezan con 10 o 20 (persona natural/jurídica)."""
+    r = _norm_ruc(ruc)
+    return len(r) == 11 and r.isdigit() and r[:2] in ("10", "20")
+
+
 def _fmt_tipo(v) -> str:
     """Normaliza el TIPO de comprobante: un solo dígito se rellena a 2 ('1' -> '01')."""
     s = re.sub(r"\.0$", "", str(v).strip())
@@ -104,12 +110,16 @@ _CELDA_TIPO_CAMBIO = "C18"
 def _pct_retencion(f: dict, ret_cfg: dict | None) -> float:
     """% de retención de una factura (0 si no aplica).
 
+    - Proveedor del exterior (RUC no nacional) -> 0: la retención es a bienes
+      nacionales; las importaciones (p. ej. Materia Prima Exterior) no aplican.
     - Con detracción (%DET > 0) -> 0: es un servicio, no un bien.
     - Proveedor que es agente de retención -> 0 (excepción configurada).
     - IMPORTE (convertido a soles) que no supera S/ 700 -> 0.
     - En otro caso -> 3%.
     """
     if not ret_cfg or not ret_cfg.get("activo"):
+        return 0.0
+    if not _es_ruc_nacional(f.get("RUC", "")):
         return 0.0
     if _num(f.get("DETRACCION")) > 0:
         return 0.0
