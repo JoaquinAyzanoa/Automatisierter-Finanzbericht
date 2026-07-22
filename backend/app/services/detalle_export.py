@@ -24,7 +24,7 @@ from pathlib import Path
 
 import openpyxl
 from openpyxl.formula.translate import Translator
-from openpyxl.styles import Alignment, Font
+from openpyxl.styles import Alignment, Border, Font
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -290,6 +290,12 @@ def _nc(c: int) -> int:
     return c if c == 1 else c + 1
 
 
+def _quitar_borde_inferior(cell) -> None:
+    """Quita el borde inferior de una celda, conservando los demás bordes."""
+    b = cell.border
+    cell.border = Border(left=b.left, right=b.right, top=b.top)
+
+
 def _centrar_horizontal(cell) -> None:
     """Centra horizontalmente una celda conservando el resto de la alineación."""
     a = cell.alignment
@@ -459,6 +465,7 @@ def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=Non
     # %DET y %RET: porcentaje con guion en el cero (como DET/RET).
     dst.cell(r, 12).number_format = _PCT_FMT
     dst.cell(r, 14).number_format = _PCT_FMT
+    _quitar_borde_inferior(dst.cell(r, 14))  # %RET sin borde inferior
     dst.cell(r, 15).value = f"=ROUND(N{r}*H{r},2)"
     dst.cell(r, 15).number_format = _DET_FMT
     # Neto (fórmula viva): SALDO(J), DET(M), PAGADO(I), RET(O).
@@ -773,6 +780,7 @@ def _escribir_fila_agente(
     dst.cell(r, 12).number_format = _DET_FMT                       # DET
     dst.cell(r, 11).number_format = _PCT_FMT                       # %DET: 0 -> "-"
     dst.cell(r, 13).number_format = _PCT_FMT                       # %RET: 0 -> "-"
+    _quitar_borde_inferior(dst.cell(r, 13))                        # %RET sin borde inferior
     dst.cell(r, 14).value = f"=ROUND(M{r}*H{r},2)"                 # RET = %RET*IMPORTE (2 dec)
     dst.cell(r, 14).number_format = _DET_FMT
     dst.cell(r, 15).value = f"=J{r}-L{r}-N{r}"                     # Neto = SALDO-DET-RET
