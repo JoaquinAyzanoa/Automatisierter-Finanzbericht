@@ -24,7 +24,7 @@ from pathlib import Path
 
 import openpyxl
 from openpyxl.formula.translate import Translator
-from openpyxl.styles import Font
+from openpyxl.styles import Alignment, Font
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -274,6 +274,16 @@ def _nc(c: int) -> int:
     return c if c == 1 else c + 1
 
 
+def _centrar_horizontal(cell) -> None:
+    """Centra horizontalmente una celda conservando el resto de la alineación."""
+    a = cell.alignment
+    cell.alignment = Alignment(
+        horizontal="center", vertical=a.vertical, wrap_text=a.wrap_text,
+        text_rotation=a.text_rotation, indent=a.indent,
+        shrink_to_fit=a.shrink_to_fit,
+    )
+
+
 def _copiar_fila_desplazada(
     src, dst, src_r, dst_r, ncols_src, ruc_val=None, es_cabecera=False
 ) -> None:
@@ -285,6 +295,10 @@ def _copiar_fila_desplazada(
     # Columna RUC (2) con el estilo de la columna TIPO (src col 2).
     _clonar_estilo(dst.cell(dst_r, _COL_RUC), src.cell(src_r, 2))
     dst.cell(dst_r, _COL_RUC).value = "RUC" if es_cabecera else ruc_val
+    # Los encabezados de columna van centrados horizontalmente.
+    if es_cabecera:
+        for c in range(1, _COL_LINK + 1):
+            _centrar_horizontal(dst.cell(dst_r, c))
 
 
 def _es_cabecera(ws, r) -> bool:
