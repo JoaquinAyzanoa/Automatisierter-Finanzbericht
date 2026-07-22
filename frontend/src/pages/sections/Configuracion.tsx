@@ -37,6 +37,7 @@ interface FilaOp {
   ambito: Ambito;
   tags: string[];
   respetaFiltro: boolean;
+  aplicaRetencion: boolean;
 }
 
 const trashIcon = (
@@ -91,6 +92,7 @@ export function Configuracion() {
               ambito: o.ambito,
               tags: o.tags ?? [],
               respetaFiltro: o.respeta_filtro ?? true,
+              aplicaRetencion: o.aplica_retencion ?? true,
             }))
           );
         }
@@ -297,6 +299,7 @@ export function Configuracion() {
         ambito: "Nacional",
         tags: [],
         respetaFiltro: true,
+        aplicaRetencion: true,
       },
     ]);
     markDirty();
@@ -347,6 +350,7 @@ export function Configuracion() {
         ambito: o.ambito,
         tags: o.tags,
         respeta_filtro: o.respetaFiltro,
+        aplica_retencion: o.aplicaRetencion,
       }));
       const result = await reemplazarOperaciones(token, items);
       setOperaciones(
@@ -357,6 +361,7 @@ export function Configuracion() {
           ambito: o.ambito,
           tags: o.tags ?? [],
           respetaFiltro: o.respeta_filtro ?? true,
+          aplicaRetencion: o.aplica_retencion ?? true,
         }))
       );
       setDirty(false);
@@ -465,6 +470,16 @@ export function Configuracion() {
                 >
                   <option value="si">Respetar filtro de fecha</option>
                   <option value="no">No respetar filtro de fecha</option>
+                </select>
+                <select
+                  className="config__filtroSelect"
+                  value={op.aplicaRetencion ? "si" : "no"}
+                  onChange={(e) =>
+                    setLocal(op.id, { aplicaRetencion: e.target.value === "si" })
+                  }
+                >
+                  <option value="si">Aplica retención</option>
+                  <option value="no">No aplica retención</option>
                 </select>
                 <div className="config__tags">
                   {op.tags.map((tag) => (

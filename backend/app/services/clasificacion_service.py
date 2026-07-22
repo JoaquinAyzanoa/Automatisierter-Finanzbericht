@@ -201,6 +201,9 @@ def clasificar_merge(path: Path, operaciones: list[Operacion]) -> dict:
             "respeta_filtro": bool(
                 op.respeta_filtro if op.respeta_filtro is not None else True
             ),
+            "aplica_retencion": bool(
+                op.aplica_retencion if op.aplica_retencion is not None else True
+            ),
         }
         for i, op in enumerate(operaciones)
     ]

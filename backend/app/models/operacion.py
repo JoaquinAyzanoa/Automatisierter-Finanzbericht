@@ -18,6 +18,10 @@ class Operacion(Base):
     respeta_filtro: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )
+    # Aplicar retención a las filas de esta operación (bienes sí; servicios no).
+    aplica_retencion: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )

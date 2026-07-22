@@ -110,6 +110,7 @@ _CELDA_TIPO_CAMBIO = "C18"
 def _pct_retencion(f: dict, ret_cfg: dict | None) -> float:
     """% de retención de una factura (0 si no aplica).
 
+    - Operación sin retención (p. ej. Pagos servicios) -> 0.
     - Proveedor del exterior (RUC no nacional) -> 0: la retención es a bienes
       nacionales; las importaciones (p. ej. Materia Prima Exterior) no aplican.
     - Con detracción (%DET > 0) -> 0: es un servicio, no un bien.
@@ -118,6 +119,8 @@ def _pct_retencion(f: dict, ret_cfg: dict | None) -> float:
     - En otro caso -> 3%.
     """
     if not ret_cfg or not ret_cfg.get("activo"):
+        return 0.0
+    if f.get("__pos") in (ret_cfg.get("pos_sin_ret") or set()):
         return 0.0
     if not _es_ruc_nacional(f.get("RUC", "")):
         return 0.0
@@ -939,6 +942,12 @@ def construir_detalle(
     if "Resumen" in wb.sheetnames:
         wb["Resumen"][_CELDA_TIPO_CAMBIO] = tc
 
+    # Operaciones que NO aplican retención (p. ej. Pagos servicios).
+    pos_sin_ret = {
+        o["pos"]
+        for o in data.get("operaciones", [])
+        if not o.get("aplica_retencion", True)
+    }
     # Config de retención: interruptor + RUCs exceptuados + tipo de cambio.
     ret_cfg = {
         "activo": bool((retencion_cfg or {}).get("activo")),
@@ -948,6 +957,7 @@ def construir_detalle(
             if str(r).strip()
         },
         "tipo_cambio": tc,
+        "pos_sin_ret": pos_sin_ret,
     }
 
     # Agrupar por O/C las facturas que incluyen a un agente o proveedor

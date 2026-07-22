@@ -60,6 +60,9 @@ def init_db() -> None:
     _ensure_column(
         "operaciones", "respeta_filtro", "BOOLEAN NOT NULL DEFAULT 1"
     )
+    _ensure_column(
+        "operaciones", "aplica_retencion", "BOOLEAN NOT NULL DEFAULT 1"
+    )
     _ensure_column("procesos", "nombre", "TEXT")
     _ensure_column("procesos", "tipo_cambio", "FLOAT")
     _ensure_column(

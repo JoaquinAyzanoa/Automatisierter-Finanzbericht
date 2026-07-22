@@ -13,6 +13,7 @@ class OperacionCreate(BaseModel):
     ambito: Ambito = "Nacional"
     tags: list[str] = []
     respeta_filtro: bool = True
+    aplica_retencion: bool = True
 
 
 class OperacionUpdate(BaseModel):
@@ -21,6 +22,7 @@ class OperacionUpdate(BaseModel):
     ambito: Ambito | None = None
     tags: list[str] | None = None
     respeta_filtro: bool | None = None
+    aplica_retencion: bool | None = None
 
 
 class OperacionRead(BaseModel):
@@ -32,4 +34,5 @@ class OperacionRead(BaseModel):
     ambito: Ambito
     tags: list[str]
     respeta_filtro: bool
+    aplica_retencion: bool
     created_at: datetime

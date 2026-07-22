@@ -26,6 +26,7 @@ class OperacionRepository:
         ambito: str,
         tags: list[str] | None = None,
         respeta_filtro: bool = True,
+        aplica_retencion: bool = True,
     ) -> Operacion:
         operacion = Operacion(
             texto=texto,
@@ -33,6 +34,7 @@ class OperacionRepository:
             ambito=ambito,
             tags=tags or [],
             respeta_filtro=respeta_filtro,
+            aplica_retencion=aplica_retencion,
         )
         self.db.add(operacion)
         self.db.commit()
@@ -47,6 +49,7 @@ class OperacionRepository:
         ambito: str | None = None,
         tags: list[str] | None = None,
         respeta_filtro: bool | None = None,
+        aplica_retencion: bool | None = None,
     ) -> Operacion:
         if texto is not None:
             operacion.texto = texto
@@ -58,6 +61,8 @@ class OperacionRepository:
             operacion.tags = tags
         if respeta_filtro is not None:
             operacion.respeta_filtro = respeta_filtro
+        if aplica_retencion is not None:
+            operacion.aplica_retencion = aplica_retencion
         self.db.commit()
         self.db.refresh(operacion)
         return operacion
@@ -67,11 +72,11 @@ class OperacionRepository:
         self.db.commit()
 
     def replace_all(
-        self, items: list[tuple[str, str, str, list[str], bool]]
+        self, items: list[tuple[str, str, str, list[str], bool, bool]]
     ) -> list[Operacion]:
         """Reemplaza toda la lista de operaciones en una sola transacción."""
         self.db.execute(delete(Operacion))
-        for texto, moneda, ambito, tags, respeta_filtro in items:
+        for texto, moneda, ambito, tags, respeta_filtro, aplica_retencion in items:
             self.db.add(
                 Operacion(
                     texto=texto,
@@ -79,6 +84,7 @@ class OperacionRepository:
                     ambito=ambito,
                     tags=tags,
                     respeta_filtro=respeta_filtro,
+                    aplica_retencion=aplica_retencion,
                 )
             )
         self.db.commit()

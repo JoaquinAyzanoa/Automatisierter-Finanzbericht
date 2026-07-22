@@ -25,11 +25,15 @@ class OperacionService:
             ambito=data.ambito,
             tags=data.tags,
             respeta_filtro=data.respeta_filtro,
+            aplica_retencion=data.aplica_retencion,
         )
 
     def replace_all(self, items: list[OperacionCreate]) -> list[Operacion]:
         pairs = [
-            (item.texto, item.moneda, item.ambito, item.tags, item.respeta_filtro)
+            (
+                item.texto, item.moneda, item.ambito, item.tags,
+                item.respeta_filtro, item.aplica_retencion,
+            )
             for item in items
         ]
         return self.repo.replace_all(pairs)
@@ -45,6 +49,7 @@ class OperacionService:
             ambito=data.ambito,
             tags=data.tags,
             respeta_filtro=data.respeta_filtro,
+            aplica_retencion=data.aplica_retencion,
         )
 
     def delete(self, operacion_id: int) -> None:

@@ -149,6 +149,7 @@ export interface Operacion {
   ambito: Ambito;
   tags: string[];
   respeta_filtro: boolean;
+  aplica_retencion: boolean;
   created_at: string;
 }
 
@@ -220,6 +221,7 @@ export async function reemplazarOperaciones(
     ambito: Ambito;
     tags: string[];
     respeta_filtro: boolean;
+    aplica_retencion: boolean;
   }[]
 ): Promise<Operacion[]> {
   const res = await fetch(`${BASE}/operaciones`, {
