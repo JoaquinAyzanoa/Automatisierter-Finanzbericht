@@ -40,6 +40,9 @@ _LINK_FONT = Font(color="0563C1", underline="single")
 _COL_DET = 13
 _DET_FMT = "_-* #,##0.00_-;\\-* #,##0.00_-;_-* \\-??_-;_-@_-"
 
+# Porcentaje con guion en el cero: "12 %" / "-" (para %DET y %RET).
+_PCT_FMT = '0 %;-0 %;"-"'
+
 _PLANTILLA = Path(__file__).resolve().parent.parent / "resources" / "plantilla.xlsx"
 _DATETIME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})[ T]\d{2}:\d{2}:\d{2}")
 _OPERACION_RE = re.compile(r"^\s*Operaci.n\s+(\d+)", re.IGNORECASE)
@@ -440,8 +443,9 @@ def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=Non
     _centrar_horizontal(dst.cell(r, 19))  # N° Registro centrado
     # DET con dos decimales.
     dst.cell(r, _COL_DET).number_format = _DET_FMT
-    # %RET como porcentaje (mismo formato que %DET); RET = %RET * IMPORTE (2 dec).
-    dst.cell(r, 14).number_format = dst.cell(r, 12).number_format
+    # %DET y %RET: porcentaje con guion en el cero (como DET/RET).
+    dst.cell(r, 12).number_format = _PCT_FMT
+    dst.cell(r, 14).number_format = _PCT_FMT
     dst.cell(r, 15).value = f"=ROUND(N{r}*H{r},2)"
     dst.cell(r, 15).number_format = _DET_FMT
     # Neto (fórmula viva): SALDO(J), DET(M), PAGADO(I), RET(O).
@@ -754,7 +758,8 @@ def _escribir_fila_agente(
         _clonar_estilo(d, src.cell(estilo_row, c))
         d.value = vals.get(_nc(c))
     dst.cell(r, 12).number_format = _DET_FMT                       # DET
-    dst.cell(r, 13).number_format = dst.cell(r, 11).number_format  # %RET como %DET
+    dst.cell(r, 11).number_format = _PCT_FMT                       # %DET: 0 -> "-"
+    dst.cell(r, 13).number_format = _PCT_FMT                       # %RET: 0 -> "-"
     dst.cell(r, 14).value = f"=ROUND(M{r}*H{r},2)"                 # RET = %RET*IMPORTE (2 dec)
     dst.cell(r, 14).number_format = _DET_FMT
     dst.cell(r, 15).value = f"=J{r}-L{r}-N{r}"                     # Neto = SALDO-DET-RET
