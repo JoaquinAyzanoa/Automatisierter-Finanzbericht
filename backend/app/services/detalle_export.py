@@ -434,6 +434,7 @@ def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=Non
         d.value = vals.get(_nc(c))
     for c in _COLS_CENTRAR:  # RUC, TIPO, N° DOC y fechas: centrados
         _centrar_horizontal(dst.cell(r, c))
+    _centrar_horizontal(dst.cell(r, 12))  # %DET centrado
     # DET con dos decimales.
     dst.cell(r, _COL_DET).number_format = _DET_FMT
     # %RET como porcentaje (mismo formato que %DET); RET = %RET * IMPORTE (2 dec).
@@ -761,6 +762,7 @@ def _escribir_fila_agente(
         _quitar_negrita(dst.cell(r, c))
     for c in _COLS_CENTRAR:  # RUC, TIPO, N° DOC y fechas: centrados
         _centrar_horizontal(dst.cell(r, c))
+    _centrar_horizontal(dst.cell(r, 11))  # %DET centrado
     registro = str(f.get("REGISTRO") or "").strip()
     if sp_cfg and registro:
         url = sharepoint.link_factura(
