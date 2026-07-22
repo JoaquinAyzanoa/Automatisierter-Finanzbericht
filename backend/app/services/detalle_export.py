@@ -300,20 +300,13 @@ def _copiar_anchos(src, dst) -> None:
             idx = column_index_from_string(letra)
         except Exception:
             continue
-        if idx > 19:
-            continue  # columnas basura de la plantilla (vacías, a la derecha)
         dst.column_dimensions[get_column_letter(_nc(idx))].width = dim.width
-    dst.column_dimensions[get_column_letter(_COL_RUC)].width = 15  # RUC
+    dst.column_dimensions[get_column_letter(_COL_RUC)].width = 16  # RUC
 
 
 # Anchos de las columnas numéricas del 'Detalle' (para que no salgan "######").
 # IMPORTE, PAGADO, SALDO, PLAZO, %DET, DET, %RET, RET, Neto.
 _ANCHOS_NUM_DETALLE = {8: 12, 9: 11, 10: 12, 11: 7, 12: 8, 13: 12, 14: 8, 15: 10, 16: 12}
-
-# Anchos de las columnas de texto del 'Detalle' (la plantilla las trae muy
-# anchas). PROVEEDOR, N° DOC, FEC. REGISTRO, DETALLE, N° O/C-O/S, N° Registro,
-# SUSTENTO.
-_ANCHOS_TEXTO_DETALLE = {1: 38, 4: 14, 5: 12, 17: 42, 18: 13, 19: 13, 20: 13}
 
 
 def _detectar_operaciones(ws: Worksheet) -> dict:
@@ -482,8 +475,8 @@ def _construir_detalle_sheet(
 
     dst = wb.create_sheet("__detalle_tmp__")
     _copiar_anchos(src, dst)
-    # Anchos fijos: numéricas (evita "######") y de texto (evita mucho espacio).
-    for c, w in {**_ANCHOS_NUM_DETALLE, **_ANCHOS_TEXTO_DETALLE}.items():
+    # Anchos fijos para las columnas numéricas (evita "######" en DET, etc.).
+    for c, w in _ANCHOS_NUM_DETALLE.items():
         dst.column_dimensions[get_column_letter(c)].width = w
 
     row_map: dict = {}
@@ -759,12 +752,12 @@ _MONEDA_ETIQUETA = {"SOL": "SOLES", "USD": "DOLARES"}
 # Anchos de la hoja 'Detalle de agentes'.
 # - Fijos: columnas numéricas / de fórmula / fechas.
 _ANCHOS_FIJOS_AG = {
-    2: 15, 3: 6, 5: 11, 6: 11, 7: 11, 8: 12, 9: 11, 10: 12,
-    11: 8, 12: 12, 13: 8, 14: 11, 15: 12, 20: 13,
+    2: 16, 3: 6, 5: 13, 6: 13, 7: 13, 8: 12, 9: 11, 10: 12,
+    11: 8, 12: 12, 13: 8, 14: 11, 15: 12, 20: 14,
 }
 # - Auto (por contenido) con (mínimo, máximo): columnas de texto.
 _ANCHOS_AUTO_AG = {
-    1: (16, 38), 4: (11, 16), 16: (14, 42), 17: (16, 38), 18: (10, 14), 19: (11, 14),
+    1: (18, 45), 4: (12, 22), 16: (16, 55), 17: (18, 45), 18: (11, 18), 19: (12, 16),
 }
 
 
