@@ -934,6 +934,7 @@ def construir_detalle(
     relacionados_rucs: list[str] | None = None,
     retencion_cfg: dict | None = None,
     tipo_cambio: float | None = None,
+    pos_sin_ret: set | None = None,
 ) -> Path:
     wb = openpyxl.load_workbook(_PLANTILLA)
 
@@ -942,12 +943,14 @@ def construir_detalle(
     if "Resumen" in wb.sheetnames:
         wb["Resumen"][_CELDA_TIPO_CAMBIO] = tc
 
-    # Operaciones que NO aplican retención (p. ej. Pagos servicios).
-    pos_sin_ret = {
-        o["pos"]
-        for o in data.get("operaciones", [])
-        if not o.get("aplica_retencion", True)
-    }
+    # Operaciones que NO aplican retención (p. ej. Pagos servicios). Se prefiere
+    # el set recibido (config actual); si no, se deriva del snapshot del proceso.
+    if pos_sin_ret is None:
+        pos_sin_ret = {
+            o["pos"]
+            for o in data.get("operaciones", [])
+            if not o.get("aplica_retencion", True)
+        }
     # Config de retención: interruptor + RUCs exceptuados + tipo de cambio.
     ret_cfg = {
         "activo": bool((retencion_cfg or {}).get("activo")),

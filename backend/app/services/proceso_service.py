@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.operacion import Operacion
 from app.models.proceso import Proceso
+from app.repositories.operacion_repository import OperacionRepository
 from app.repositories.proceso_repository import ProcesoRepository
 from app.services import clasificacion_service, detalle_export, merge_service
 from app.services.agente_config_service import AgenteConfigService
@@ -140,6 +141,13 @@ class ProcesoService:
         output_path = Path(settings.REPORTS_DIR) / DESCARGA_FILENAME
         sharepoint_cfg = SharepointConfigService(self.db).as_dict()
         agente_svc = AgenteConfigService(self.db)
+        # Operaciones sin retención según la config ACTUAL (no el snapshot del
+        # proceso), para que el toggle aplique sin reprocesar. Posición = orden.
+        pos_sin_ret = {
+            i + 1
+            for i, op in enumerate(OperacionRepository(self.db).list())
+            if not op.aplica_retencion
+        }
         return detalle_export.construir_detalle(
             data,
             proceso.fecha_inicio,
@@ -150,4 +158,5 @@ class ProcesoService:
             agente_svc.relacionados_list(),
             RetencionConfigService(self.db).as_dict(),
             proceso.tipo_cambio,
+            pos_sin_ret,
         )
