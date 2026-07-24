@@ -868,6 +868,10 @@ def _mover_banda_liquidez(ws) -> None:
             cel = ws.cell(r, c)
             if isinstance(valor, str):
                 valor = _RENOMBRE_BANDA.get(valor, valor)
+            # 'TOTAL DE VENTA REQUERIDA' (col B de la fila de valores): sin
+            # fórmula; se llena a mano (queda vacío, con su formato).
+            if i == ultima_i and c == 2:
+                valor = None
             # Sus referencias también subieron n filas.
             cel.value = _trasladar_formula(
                 valor, get_column_letter(c), fila["row"], fila["row"] - n
