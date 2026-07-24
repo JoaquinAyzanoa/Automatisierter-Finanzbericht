@@ -20,6 +20,7 @@ Columnas calculadas (supuestos):
 
 import re
 from copy import copy
+from datetime import date, datetime
 from pathlib import Path
 
 import openpyxl
@@ -70,10 +71,20 @@ def _num(value) -> float:
         return 0.0
 
 
-def _fecha(value) -> str:
+_FECHA_FMT = "yyyy-mm-dd"
+
+
+def _fecha(value):
+    """Fecha como objeto `date` para que Excel pueda operarla (p. ej. PLAZO).
+    Si el valor no es una fecha reconocible, devuelve el texto tal cual."""
     s = "" if value is None else str(value).strip()
     m = _DATETIME_RE.match(s)
-    return m.group(1) if m else s
+    if m:
+        s = m.group(1)
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError:
+        return s
 
 
 def _norm_ruc(ruc) -> str:
@@ -454,6 +465,14 @@ def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=Non
     _centrar_horizontal(dst.cell(r, 12))  # %DET centrado
     _centrar_horizontal(dst.cell(r, 18))  # N° O/C-O/S centrado
     _centrar_horizontal(dst.cell(r, 19))  # N° Registro centrado
+    # Fechas como fecha real (para que PLAZO pueda restarlas).
+    for c in _FECHA_COLS:
+        if isinstance(vals.get(c), date):
+            dst.cell(r, c).number_format = _FECHA_FMT
+    # PLAZO (K) = FEC.VCTO (G) - FEC.DOC (F), en días; vacío si falta alguna.
+    dst.cell(r, 11).value = f'=IF(OR(F{r}="",G{r}=""),"",G{r}-F{r})'
+    dst.cell(r, 11).number_format = "0"
+    _centrar_horizontal(dst.cell(r, 11))
     # DET con dos decimales.
     dst.cell(r, _COL_DET).number_format = _DET_FMT
     # %DET y %RET: porcentaje con guion en el cero (como DET/RET).
@@ -773,6 +792,9 @@ def _escribir_fila_agente(
         _clonar_estilo(d, src.cell(estilo_row, c))
         d.value = vals.get(_nc(c))
     dst.cell(r, 12).number_format = _DET_FMT                       # DET
+    for c in _FECHA_COLS:  # fechas como fecha real
+        if isinstance(vals.get(c), date):
+            dst.cell(r, c).number_format = _FECHA_FMT
     dst.cell(r, 11).number_format = _PCT_FMT                       # %DET: 0 -> "-"
     dst.cell(r, 13).number_format = _PCT_FMT                       # %RET: 0 -> "-"
     dst.cell(r, 13).border = copy(dst.cell(r, 11).border)         # %RET como %DET
