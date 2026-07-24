@@ -743,73 +743,6 @@ def _construir_detalle_sheet(
     return total_rows
 
 
-# Banda 'ESTADO DE LIQUIDEZ' del Resumen (cabecera + valores) que se mueve al
-# final de la hoja, después de la sección V.
-_RESUMEN_BANDA = (4, 5)
-_RESUMEN_NCOLS = 4
-
-
-def _mover_banda_liquidez(ws) -> None:
-    """Mueve la banda 'ESTADO DE LIQUIDEZ' (filas 4-5) al final del Resumen.
-
-    Las fórmulas se copian TAL CUAL: apuntan a filas que no se mueven (D18, D25,
-    C31, D35-D37), así que siguen siendo válidas. Las filas originales se limpian
-    y se colapsan (no se borran, porque correr filas rompería las demás fórmulas).
-    """
-    r_ini, r_fin = _RESUMEN_BANDA
-    if not str(ws.cell(r_ini, 1).value or "").strip().upper().startswith(
-        "ESTADO DE LIQUIDEZ"
-    ):
-        return  # la plantilla ya no tiene la banda arriba: nada que mover
-
-    banda = [
-        {
-            "alto": ws.row_dimensions[r].height,
-            "celdas": [
-                (
-                    ws.cell(r, c).value,
-                    copy(ws.cell(r, c)._style) if ws.cell(r, c).has_style else None,
-                )
-                for c in range(1, _RESUMEN_NCOLS + 1)
-            ],
-        }
-        for r in range(r_ini, r_fin + 1)
-    ]
-
-    # Última fila con contenido (antes de agregar la banda al final).
-    ultima = max(
-        (
-            r
-            for r in range(1, ws.max_row + 1)
-            if any(
-                ws.cell(r, c).value not in (None, "")
-                for c in range(1, _RESUMEN_NCOLS + 1)
-            )
-        ),
-        default=ws.max_row,
-    )
-
-    # Limpiar y colapsar las filas originales.
-    for r in range(r_ini, r_fin + 1):
-        for c in range(1, _RESUMEN_NCOLS + 1):
-            ws.cell(r, c).value = None
-            ws.cell(r, c).style = "Normal"
-        ws.row_dimensions[r].height = None
-        ws.row_dimensions[r].hidden = True
-
-    # Escribir la banda al final, dejando una fila en blanco de separación.
-    destino = ultima + 2
-    for i, fila in enumerate(banda):
-        r = destino + i
-        if fila["alto"]:
-            ws.row_dimensions[r].height = fila["alto"]
-        for c, (valor, estilo) in enumerate(fila["celdas"], start=1):
-            cel = ws.cell(r, c)
-            cel.value = valor
-            if estilo is not None:
-                cel._style = estilo
-
-
 def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
     if "Resumen" not in wb.sheetnames:
         return
@@ -831,9 +764,6 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
             )
             if pos in total_rows:
                 ws.cell(r, 4).value = f"=+Detalle!P{total_rows[pos]}"
-
-    # La banda 'ESTADO DE LIQUIDEZ' va al final (después de la sección V).
-    _mover_banda_liquidez(ws)
 
 
 # Hoja 'Detalle de agentes' (SALIDA): columna -> clave de texto. Layout propio
