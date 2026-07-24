@@ -752,6 +752,10 @@ _RESUMEN_NCOLS = 4
 # Alto de la fila de valores de la banda (para que el texto del estado, que va
 # en dos líneas, se lea completo).
 _ALTO_BANDA_ESTADO = 32.5
+# Tamaños de fuente de esa fila: la plantilla traía 9 / 16 / 17 / 17 (se veían
+# desparejos). El texto del estado va menor porque ocupa dos líneas.
+_TAM_BANDA_TEXTO = 11
+_TAM_BANDA_MONTOS = 16
 
 
 def _trasladar_formula(valor, col: str, desde: int, hasta: int):
@@ -851,10 +855,11 @@ def _mover_banda_liquidez(ws) -> None:
         default=ws.max_row,
     )
     destino = ultima + 2
+    ultima_i = len(banda) - 1
     for i, fila in enumerate(banda):
         r = destino + i
         # La última fila de la banda (los valores) lleva un alto mayor.
-        alto = _ALTO_BANDA_ESTADO if i == len(banda) - 1 else fila["alto"]
+        alto = _ALTO_BANDA_ESTADO if i == ultima_i else fila["alto"]
         if alto:
             ws.row_dimensions[r].height = alto
         for c, (valor, estilo) in enumerate(fila["celdas"], start=1):
@@ -865,6 +870,15 @@ def _mover_banda_liquidez(ws) -> None:
             )
             if estilo is not None:
                 cel._style = estilo
+            # Uniformar el tamaño de fuente de la fila de valores (venía disparejo).
+            if i == ultima_i:
+                f = cel.font
+                cel.font = Font(
+                    name=f.name,
+                    size=_TAM_BANDA_TEXTO if c == 1 else _TAM_BANDA_MONTOS,
+                    bold=f.b, italic=f.i, color=f.color,
+                    vertAlign=f.vertAlign, underline=f.underline, strike=f.strike,
+                )
 
     # Rearmar el formato condicional con las filas nuevas.
     def _fila_nueva(r: int):
