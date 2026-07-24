@@ -7,12 +7,13 @@ el Resumen se rellenan los importes de 'I. PAGOS A REALIZAR'. La categoría
 'Otros' (sin categoría) NO se incluye.
 
 La plantilla tiene 19 columnas (col 1 = PROVEEDOR, col 2 = TIPO, ...). En la
-salida se INSERTA una columna 'RUC' en la posición 2 (entre PROVEEDOR y TIPO),
-de modo que todas las columnas de la plantilla ≥ 2 se desplazan +1. El mapeo
-src (plantilla) -> dst (salida) es: col 1 -> 1; col c≥2 -> c+1; y la col 2 de
-la salida es la nueva 'RUC'. Las fórmulas se trasladan con Translator (fila y
-columna) al copiar; como ninguna referencia apunta a la columna A, el
-desplazamiento uniforme +1 de columna es correcto.
+salida se INSERTA una columna 'RUC' en la posición 2 (entre PROVEEDOR y TIPO) y
+se OMITE 'N° Registro' (col 18 de la plantilla), porque SUSTENTO ya muestra ese
+mismo número con el hipervínculo al PDF. El mapeo src -> dst lo hace `_nc()`:
+col 1 -> 1; 2..17 -> +1; 18 -> None (suprimida); 19 -> 19. La salida queda con
+19 columnas. Las fórmulas se trasladan con Translator (fila y columna) al
+copiar; como ninguna referencia apunta a la columna A, el desplazamiento es
+correcto.
 
 Columnas calculadas (supuestos):
 - % DET = columna DETRACCION (tasa).  DET = IMPORTE * % DET / 100.  Neto = SALDO - DET - RET.
@@ -33,10 +34,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from app.services import sharepoint
 
-# --- Columnas de la SALIDA (dst), ya con la columna RUC insertada en la 2 ---
+# --- Columnas de la SALIDA (dst): RUC insertada en la 2 y sin 'N° Registro' ---
 _COL_RUC = 2
 # Columna SUSTENTO / LINK FACTURA (donde va el hipervínculo al PDF).
-_COL_LINK = 20
+_COL_LINK = 19
 _LINK_FONT = Font(color="0563C1", underline="single")
 
 # Columna DET: formato contable con 2 decimales (cero -> guion).
@@ -61,7 +62,7 @@ _SEGUROS_PROVEEDORES = [
 _TXT = {
     1: "PROVEEDOR", 2: "RUC", 3: "TIPO", 4: "NUMERO",
     5: "FEC REGISTRO", 6: "FECHA DOC.", 7: "FEC. VCTO",
-    17: "PRODUCTO", 18: "ORD_COMPRA", 19: "REGISTRO", 20: "REGISTRO",
+    17: "PRODUCTO", 18: "ORD_COMPRA", 19: "REGISTRO",
 }
 _FECHA_COLS = {5, 6, 7}
 
@@ -311,9 +312,25 @@ def _copiar_celda(s, d, src_r: int, dst_r: int, src_col: int, dst_col: int) -> N
     d.value = v
 
 
-def _nc(c: int) -> int:
-    """Columna src (plantilla) -> columna dst (salida): inserta RUC en la 2."""
-    return c if c == 1 else c + 1
+# Columna 'N° Registro' de la plantilla (src). Se omite en la salida: SUSTENTO
+# ya muestra ese mismo número, con el hipervínculo al PDF.
+_SRC_COL_OMITIDA = 18
+
+
+def _nc(c: int) -> int | None:
+    """Columna src (plantilla) -> columna dst (salida): inserta RUC en la 2 y
+    omite 'N° Registro' (devuelve None para esa columna)."""
+    if c == 1:
+        return 1
+    if c == _SRC_COL_OMITIDA:
+        return None
+    return c + 1 if c < _SRC_COL_OMITIDA else c
+
+
+def _nc_rango(c1: int, c2: int) -> tuple[int, int]:
+    """Columnas inicial/final (src) de un rango -> (dst). Si un extremo cae en la
+    columna suprimida, el rango se encoge hacia el lado que corresponde."""
+    return (_nc(c1) or _SRC_COL_OMITIDA + 1), (_nc(c2) or _SRC_COL_OMITIDA)
 
 
 def _centrar_horizontal(cell) -> None:
@@ -338,7 +355,10 @@ def _copiar_fila_desplazada(
     columna RUC. Rellena la col RUC con `ruc_val` (o 'RUC' si es cabecera)."""
     _copiar_celda(src.cell(src_r, 1), dst.cell(dst_r, 1), src_r, dst_r, 1, 1)
     for c in range(2, ncols_src + 1):
-        _copiar_celda(src.cell(src_r, c), dst.cell(dst_r, _nc(c)), src_r, dst_r, c, _nc(c))
+        d = _nc(c)
+        if d is None:
+            continue  # 'N° Registro': no va a la salida
+        _copiar_celda(src.cell(src_r, c), dst.cell(dst_r, d), src_r, dst_r, c, d)
     # Columna RUC (2) con el estilo de la columna TIPO (src col 2).
     _clonar_estilo(dst.cell(dst_r, _COL_RUC), src.cell(src_r, 2))
     dst.cell(dst_r, _COL_RUC).value = "RUC" if es_cabecera else ruc_val
@@ -361,7 +381,10 @@ def _copiar_anchos(src, dst) -> None:
             idx = column_index_from_string(letra)
         except Exception:
             continue
-        dst.column_dimensions[get_column_letter(_nc(idx))].width = dim.width
+        d = _nc(idx)
+        if d is None:
+            continue
+        dst.column_dimensions[get_column_letter(d)].width = dim.width
     dst.column_dimensions[get_column_letter(_COL_RUC)].width = 16  # RUC
 
 
@@ -472,14 +495,16 @@ def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=Non
     _clonar_estilo(dst.cell(r, _COL_RUC), src.cell(estilo_row, 2))  # RUC (estilo TIPO)
     dst.cell(r, _COL_RUC).value = vals.get(_COL_RUC)
     for c in range(2, ncols_src + 1):
-        d = dst.cell(r, _nc(c))
+        dc = _nc(c)
+        if dc is None:
+            continue  # 'N° Registro': no va a la salida
+        d = dst.cell(r, dc)
         _clonar_estilo(d, src.cell(estilo_row, c))
-        d.value = vals.get(_nc(c))
+        d.value = vals.get(dc)
     for c in _COLS_CENTRAR:  # RUC, TIPO, N° DOC y fechas: centrados
         _centrar_horizontal(dst.cell(r, c))
     _centrar_horizontal(dst.cell(r, 12))  # %DET centrado
     _centrar_horizontal(dst.cell(r, 18))  # N° O/C-O/S centrado
-    _centrar_horizontal(dst.cell(r, 19))  # N° Registro centrado
     # Fechas como fecha real (para que PLAZO pueda restarlas).
     for c in _FECHA_COLS:
         if isinstance(vals.get(c), date):
@@ -724,8 +749,8 @@ def _construir_detalle_sheet(
     for mc in list(src.merged_cells.ranges):
         if mc.min_row in row_map and mc.max_row in row_map:
             dst.merge_cells(
-                start_row=row_map[mc.min_row], start_column=_nc(mc.min_col),
-                end_row=row_map[mc.max_row], end_column=_nc(mc.max_col),
+                start_row=row_map[mc.min_row], start_column=_nc_rango(mc.min_col, mc.max_col)[0],
+                end_row=row_map[mc.max_row], end_column=_nc_rango(mc.min_col, mc.max_col)[1],
             )
     # Merges de las filas TOTAL de las secciones Operación/Agentes (A:O).
     for tr in total_merges:
@@ -962,7 +987,7 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
 _TXT_AG = {
     1: "PROVEEDOR", 2: "RUC", 3: "TIPO", 4: "NUMERO",
     5: "FEC REGISTRO", 6: "FECHA DOC.", 7: "FEC. VCTO",
-    16: "PRODUCTO", 18: "ORD_COMPRA", 19: "REGISTRO", 20: "REGISTRO",
+    16: "PRODUCTO", 18: "ORD_COMPRA", 19: "REGISTRO",
 }
 
 
@@ -994,9 +1019,12 @@ def _escribir_fila_agente(
     _clonar_estilo(dst.cell(r, _COL_RUC), src.cell(estilo_row, 2))  # RUC (estilo TIPO)
     dst.cell(r, _COL_RUC).value = vals.get(_COL_RUC)
     for c in range(2, ncols_src + 1):
-        d = dst.cell(r, _nc(c))
+        dc = _nc(c)
+        if dc is None:
+            continue  # 'N° Registro': no va a la salida
+        d = dst.cell(r, dc)
         _clonar_estilo(d, src.cell(estilo_row, c))
-        d.value = vals.get(_nc(c))
+        d.value = vals.get(dc)
     dst.cell(r, 12).number_format = _DET_FMT                       # DET
     for c in _FECHA_COLS:  # fechas como fecha real
         if isinstance(vals.get(c), date):
@@ -1016,7 +1044,6 @@ def _escribir_fila_agente(
         _centrar_horizontal(dst.cell(r, c))
     _centrar_horizontal(dst.cell(r, 11))  # %DET centrado
     _centrar_horizontal(dst.cell(r, 18))  # N° O/C-O/S centrado
-    _centrar_horizontal(dst.cell(r, 19))  # N° Registro centrado
     registro = str(f.get("REGISTRO") or "").strip()
     if sp_cfg and registro:
         url = sharepoint.link_factura(
@@ -1034,11 +1061,11 @@ _MONEDA_ETIQUETA = {"SOL": "SOLES", "USD": "DOLARES"}
 # - Fijos: columnas numéricas / de fórmula / fechas.
 _ANCHOS_FIJOS_AG = {
     2: 16, 3: 6, 5: 13, 6: 13, 7: 13, 8: 12, 9: 11, 10: 12,
-    11: 8, 12: 12, 13: 8, 14: 11, 15: 12, 20: 14,
+    11: 8, 12: 12, 13: 8, 14: 11, 15: 12, 19: 14,
 }
 # - Auto (por contenido) con (mínimo, máximo): columnas de texto.
 _ANCHOS_AUTO_AG = {
-    1: (18, 45), 4: (12, 22), 16: (16, 55), 17: (18, 45), 18: (11, 18), 19: (12, 16),
+    1: (18, 45), 4: (12, 22), 16: (16, 55), 17: (18, 45), 18: (11, 18),
 }
 
 
@@ -1099,11 +1126,8 @@ def _construir_detalle_agentes_sheet(
         dst.cell(dst_r, 15).value = None
         dst.merge_cells(start_row=dst_r, start_column=1, end_row=dst_r, end_column=ncols_dst)
         dst_r += 1
-        # Cabecera. Se añade el encabezado 'N° Registro' en la columna S (19),
-        # que la plantilla de esta hoja no traía (estilo de la cabecera vecina).
+        # Cabecera.
         _copiar_fila_desplazada(src, dst, header_row, dst_r, ncols, es_cabecera=True)
-        _clonar_estilo(dst.cell(dst_r, 19), dst.cell(dst_r, 18))
-        dst.cell(dst_r, 19).value = "N° Registro"
         if src.row_dimensions[header_row].height:
             dst.row_dimensions[dst_r].height = src.row_dimensions[header_row].height
         dst_r += 1
