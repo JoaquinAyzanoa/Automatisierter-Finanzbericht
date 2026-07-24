@@ -763,11 +763,13 @@ def _trasladar_formula(valor, col: str, desde: int, hasta: int):
 
 def _mover_banda_liquidez(ws) -> None:
     """Mueve la banda 'ESTADO DE LIQUIDEZ' (filas 4-5) al final del Resumen y
-    ELIMINA las filas que ocupaba (4-6, incluida la separadora).
+    ELIMINA las filas 3-5 (la separadora de arriba + la banda), igual que si se
+    borraran a mano en Excel.
 
-    Al borrar filas las de abajo suben `n`; openpyxl no ajusta las fórmulas, así
-    que se trasladan una a una. Las fórmulas de la banda también se ajustan,
-    porque sus referencias (D18, D25, C31, D35-D37) subieron lo mismo.
+    Al borrar filas las de abajo suben `n`; openpyxl no ajusta las fórmulas ni
+    los merges, así que se trasladan/rearman a mano. Las fórmulas de la banda
+    también se ajustan, porque sus referencias (D18, D25, C31, D35-D37) subieron
+    lo mismo.
 
     Debe ejecutarse ANTES de reescribir las fórmulas de 'Operación N' (que
     apuntan a la hoja Detalle), para que esas se escriban ya con la fila final.
@@ -778,7 +780,8 @@ def _mover_banda_liquidez(ws) -> None:
     ):
         return  # la plantilla ya no tiene la banda arriba: nada que mover
 
-    n = (r_fin - r_ini + 1) + 1  # banda + la fila en blanco que la seguía
+    r_borrar = r_ini - 1               # fila en blanco que va encima de la banda
+    n = (r_fin - r_borrar) + 1         # filas a borrar: separadora + banda
 
     banda = [
         {
@@ -805,8 +808,8 @@ def _mover_banda_liquidez(ws) -> None:
     for m in list(ws.merged_cells.ranges):
         ws.unmerge_cells(str(m))
 
-    ws.delete_rows(r_ini, n)
-    for row in ws.iter_rows(min_row=r_ini, max_row=ws.max_row):
+    ws.delete_rows(r_borrar, n)
+    for row in ws.iter_rows(min_row=r_borrar, max_row=ws.max_row):
         for cel in row:
             v = cel.value
             if not (isinstance(v, str) and v.startswith("=")):
@@ -818,9 +821,9 @@ def _mover_banda_liquidez(ws) -> None:
                 cel.value = nuevo
 
     for min_r, min_c, max_r, max_c in merges:
-        if max_r < r_ini:
+        if max_r < r_borrar:
             f1, f2 = min_r, max_r          # arriba de lo borrado: sin cambio
-        elif min_r >= r_ini + n:
+        elif min_r >= r_borrar + n:
             f1, f2 = min_r - n, max_r - n  # abajo: sube n filas
         else:
             continue                       # estaba dentro de lo borrado
