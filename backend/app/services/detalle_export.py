@@ -24,9 +24,11 @@ from datetime import date, datetime
 from pathlib import Path
 
 import openpyxl
+from openpyxl.formatting.formatting import ConditionalFormattingList
 from openpyxl.formula.translate import Translator
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import column_index_from_string, get_column_letter
+from openpyxl.worksheet.cell_range import CellRange
 from openpyxl.worksheet.worksheet import Worksheet
 
 from app.services import sharepoint
@@ -799,14 +801,18 @@ def _mover_banda_liquidez(ws) -> None:
     ]
 
     # Borrar la banda y su separador: todo lo de abajo sube n filas.
-    # openpyxl no ajusta los merges al borrar filas (quedarían desfasados y
-    # taparían contenido): se desarman antes y se rearman desplazados.
+    # openpyxl no ajusta merges ni formato condicional al borrar filas (quedarían
+    # desfasados: taparían contenido o pintarían celdas equivocadas). Se guardan,
+    # se limpian y se rearman con las filas nuevas.
     merges = [
         (m.min_row, m.min_col, m.max_row, m.max_col)
         for m in list(ws.merged_cells.ranges)
     ]
     for m in list(ws.merged_cells.ranges):
         ws.unmerge_cells(str(m))
+
+    cond = [(str(cf.sqref), list(cf.rules)) for cf in ws.conditional_formatting]
+    ws.conditional_formatting = ConditionalFormattingList()
 
     ws.delete_rows(r_borrar, n)
     for row in ws.iter_rows(min_row=r_borrar, max_row=ws.max_row):
@@ -854,6 +860,32 @@ def _mover_banda_liquidez(ws) -> None:
             )
             if estilo is not None:
                 cel._style = estilo
+
+    # Rearmar el formato condicional con las filas nuevas.
+    def _fila_nueva(r: int):
+        if r_ini <= r <= r_fin:
+            return destino + (r - r_ini)   # estaba en la banda: se fue al final
+        if r < r_borrar:
+            return r                       # arriba de lo borrado
+        if r >= r_borrar + n:
+            return r - n                   # abajo: sube n
+        return None                        # fila borrada
+
+    for sqref, reglas in cond:
+        rangos = []
+        for parte in str(sqref).split():
+            cr = CellRange(parte)
+            f1, f2 = _fila_nueva(cr.min_row), _fila_nueva(cr.max_row)
+            if f1 is None or f2 is None:
+                continue
+            rangos.append(
+                f"{get_column_letter(cr.min_col)}{f1}:"
+                f"{get_column_letter(cr.max_col)}{f2}"
+            )
+        if not rangos:
+            continue
+        for regla in reglas:
+            ws.conditional_formatting.add(" ".join(rangos), regla)
 
 
 def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
