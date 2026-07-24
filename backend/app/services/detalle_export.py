@@ -895,7 +895,7 @@ def _mover_banda_liquidez(ws) -> None:
 
 # Anchos fijos de columnas del Resumen:
 # A = 'Banco/Concepto', B = 'Operación', C = 'Moneda', D = 'Importe'.
-_ANCHOS_RESUMEN = {"A": 30, "B": 41.5, "C": 35, "D": 24}
+_ANCHOS_RESUMEN = {"A": 32, "B": 41.5, "C": 35, "D": 24}
 
 
 def _ajustar_ancho_operacion(ws) -> None:
