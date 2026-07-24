@@ -749,12 +749,28 @@ _RESUMEN_BANDA = (4, 5)
 _RESUMEN_NCOLS = 4
 
 
-def _mover_banda_liquidez(ws) -> None:
-    """Mueve la banda 'ESTADO DE LIQUIDEZ' (filas 4-5) al final del Resumen.
+def _trasladar_formula(valor, col: str, desde: int, hasta: int):
+    """Traslada una fórmula de la fila `desde` a la fila `hasta` (misma columna)."""
+    if not (isinstance(valor, str) and valor.startswith("=")) or desde == hasta:
+        return valor
+    try:
+        return Translator(valor, origin=f"{col}{desde}").translate_formula(
+            f"{col}{hasta}"
+        )
+    except Exception:
+        return valor
 
-    Las fórmulas se copian TAL CUAL: apuntan a filas que no se mueven (D18, D25,
-    C31, D35-D37), así que siguen siendo válidas. Las filas originales se limpian
-    y se colapsan (no se borran, porque correr filas rompería las demás fórmulas).
+
+def _mover_banda_liquidez(ws) -> None:
+    """Mueve la banda 'ESTADO DE LIQUIDEZ' (filas 4-5) al final del Resumen y
+    ELIMINA las filas que ocupaba (4-6, incluida la separadora).
+
+    Al borrar filas las de abajo suben `n`; openpyxl no ajusta las fórmulas, así
+    que se trasladan una a una. Las fórmulas de la banda también se ajustan,
+    porque sus referencias (D18, D25, C31, D35-D37) subieron lo mismo.
+
+    Debe ejecutarse ANTES de reescribir las fórmulas de 'Operación N' (que
+    apuntan a la hoja Detalle), para que esas se escriban ya con la fila final.
     """
     r_ini, r_fin = _RESUMEN_BANDA
     if not str(ws.cell(r_ini, 1).value or "").strip().upper().startswith(
@@ -762,8 +778,11 @@ def _mover_banda_liquidez(ws) -> None:
     ):
         return  # la plantilla ya no tiene la banda arriba: nada que mover
 
+    n = (r_fin - r_ini + 1) + 1  # banda + la fila en blanco que la seguía
+
     banda = [
         {
+            "row": r,
             "alto": ws.row_dimensions[r].height,
             "celdas": [
                 (
@@ -776,7 +795,38 @@ def _mover_banda_liquidez(ws) -> None:
         for r in range(r_ini, r_fin + 1)
     ]
 
-    # Última fila con contenido (antes de agregar la banda al final).
+    # Borrar la banda y su separador: todo lo de abajo sube n filas.
+    # openpyxl no ajusta los merges al borrar filas (quedarían desfasados y
+    # taparían contenido): se desarman antes y se rearman desplazados.
+    merges = [
+        (m.min_row, m.min_col, m.max_row, m.max_col)
+        for m in list(ws.merged_cells.ranges)
+    ]
+    for m in list(ws.merged_cells.ranges):
+        ws.unmerge_cells(str(m))
+
+    ws.delete_rows(r_ini, n)
+    for row in ws.iter_rows(min_row=r_ini, max_row=ws.max_row):
+        for cel in row:
+            v = cel.value
+            if not (isinstance(v, str) and v.startswith("=")):
+                continue
+            nuevo = _trasladar_formula(
+                v, get_column_letter(cel.column), cel.row + n, cel.row
+            )
+            if nuevo != v:
+                cel.value = nuevo
+
+    for min_r, min_c, max_r, max_c in merges:
+        if max_r < r_ini:
+            f1, f2 = min_r, max_r          # arriba de lo borrado: sin cambio
+        elif min_r >= r_ini + n:
+            f1, f2 = min_r - n, max_r - n  # abajo: sube n filas
+        else:
+            continue                       # estaba dentro de lo borrado
+        ws.merge_cells(start_row=f1, start_column=min_c, end_row=f2, end_column=max_c)
+
+    # Escribir la banda al final, dejando una fila en blanco de separación.
     ultima = max(
         (
             r
@@ -788,16 +838,6 @@ def _mover_banda_liquidez(ws) -> None:
         ),
         default=ws.max_row,
     )
-
-    # Limpiar y colapsar las filas originales.
-    for r in range(r_ini, r_fin + 1):
-        for c in range(1, _RESUMEN_NCOLS + 1):
-            ws.cell(r, c).value = None
-            ws.cell(r, c).style = "Normal"
-        ws.row_dimensions[r].height = None
-        ws.row_dimensions[r].hidden = True
-
-    # Escribir la banda al final, dejando una fila en blanco de separación.
     destino = ultima + 2
     for i, fila in enumerate(banda):
         r = destino + i
@@ -805,7 +845,10 @@ def _mover_banda_liquidez(ws) -> None:
             ws.row_dimensions[r].height = fila["alto"]
         for c, (valor, estilo) in enumerate(fila["celdas"], start=1):
             cel = ws.cell(r, c)
-            cel.value = valor
+            # Sus referencias también subieron n filas.
+            cel.value = _trasladar_formula(
+                valor, get_column_letter(c), fila["row"], fila["row"] - n
+            )
             if estilo is not None:
                 cel._style = estilo
 
@@ -814,6 +857,9 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
     if "Resumen" not in wb.sheetnames:
         return
     ws = wb["Resumen"]
+    # Primero se reacomoda la hoja (mover banda + borrar filas), y recién luego
+    # se escriben las fórmulas hacia Detalle, ya en su fila definitiva.
+    _mover_banda_liquidez(ws)
     op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
     op_moneda = {o["pos"]: o.get("moneda", "") for o in operaciones}
     # En 'I. PAGOS A REALIZAR' cada fila tiene la etiqueta 'Operación N' en col B
@@ -831,9 +877,6 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
             )
             if pos in total_rows:
                 ws.cell(r, 4).value = f"=+Detalle!P{total_rows[pos]}"
-
-    # La banda 'ESTADO DE LIQUIDEZ' va al final (después de la sección V).
-    _mover_banda_liquidez(ws)
 
 
 # Hoja 'Detalle de agentes' (SALIDA): columna -> clave de texto. Layout propio
