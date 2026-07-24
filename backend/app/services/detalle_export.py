@@ -888,6 +888,18 @@ def _mover_banda_liquidez(ws) -> None:
             ws.conditional_formatting.add(" ".join(rangos), regla)
 
 
+def _ajustar_ancho_operacion(ws) -> None:
+    """Ajusta el ancho de la columna B del Resumen al texto más largo (las
+    etiquetas 'Operación N - nombre - moneda'), para que no se corten."""
+    maxlen = 0
+    for r in range(1, ws.max_row + 1):
+        v = ws.cell(r, 2).value
+        if isinstance(v, str) and not v.startswith("="):
+            maxlen = max(maxlen, len(v))
+    if maxlen:
+        ws.column_dimensions["B"].width = min(max(maxlen + 2, 20), 55)
+
+
 def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
     if "Resumen" not in wb.sheetnames:
         return
@@ -912,6 +924,9 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
             )
             if pos in total_rows:
                 ws.cell(r, 4).value = f"=+Detalle!P{total_rows[pos]}"
+
+    # La columna de 'Operación' se ajusta a las etiquetas ya reescritas.
+    _ajustar_ancho_operacion(ws)
 
 
 # Hoja 'Detalle de agentes' (SALIDA): columna -> clave de texto. Layout propio
