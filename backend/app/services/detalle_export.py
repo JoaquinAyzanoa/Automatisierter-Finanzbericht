@@ -73,6 +73,19 @@ def _num(value) -> float:
 
 _FECHA_FMT = "yyyy-mm-dd"
 
+# Plazos de crédito establecidos (días). La resta FEC.VCTO - FEC.DOC se ajusta
+# al más cercano de esta lista (p. ej. 6 -> 7, 31 -> 30, 14 -> 15).
+_PLAZOS = [1, 7, 15, 30, 45, 60]
+# Puntos de corte: 0 y el punto medio entre cada par consecutivo (redondeado
+# hacia arriba), para que LOOKUP devuelva el plazo más cercano.
+_PLAZO_CORTES = [0] + [
+    (a + b + 1) // 2 for a, b in zip(_PLAZOS, _PLAZOS[1:])
+]
+_PLAZO_LOOKUP = (
+    "{" + ",".join(str(c) for c in _PLAZO_CORTES) + "},"
+    "{" + ",".join(str(p) for p in _PLAZOS) + "}"
+)
+
 
 def _fecha(value):
     """Fecha como objeto `date` para que Excel pueda operarla (p. ej. PLAZO).
@@ -469,8 +482,12 @@ def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=Non
     for c in _FECHA_COLS:
         if isinstance(vals.get(c), date):
             dst.cell(r, c).number_format = _FECHA_FMT
-    # PLAZO (K) = FEC.VCTO (G) - FEC.DOC (F), en días; vacío si falta alguna.
-    dst.cell(r, 11).value = f'=IF(OR(F{r}="",G{r}=""),"",G{r}-F{r})'
+    # PLAZO (K) = FEC.VCTO (G) - FEC.DOC (F) ajustado al plazo de crédito
+    # establecido más cercano; vacío si falta alguna fecha.
+    dst.cell(r, 11).value = (
+        f'=IF(OR(F{r}="",G{r}=""),"",'
+        f'LOOKUP(MAX(0,G{r}-F{r}),{_PLAZO_LOOKUP}))'
+    )
     dst.cell(r, 11).number_format = "0"
     _centrar_horizontal(dst.cell(r, 11))
     # DET con dos decimales.
