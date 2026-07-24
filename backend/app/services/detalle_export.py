@@ -888,16 +888,13 @@ def _mover_banda_liquidez(ws) -> None:
             ws.conditional_formatting.add(" ".join(rangos), regla)
 
 
+# Ancho de la columna 'Operación' (B) del Resumen.
+_ANCHO_COL_OPERACION = 41.5
+
+
 def _ajustar_ancho_operacion(ws) -> None:
-    """Ajusta el ancho de la columna B del Resumen al texto más largo (las
-    etiquetas 'Operación N - nombre - moneda'), para que no se corten."""
-    maxlen = 0
-    for r in range(1, ws.max_row + 1):
-        v = ws.cell(r, 2).value
-        if isinstance(v, str) and not v.startswith("="):
-            maxlen = max(maxlen, len(v))
-    if maxlen:
-        ws.column_dimensions["B"].width = min(max(maxlen + 2, 20), 55)
+    """Fija el ancho de la columna B del Resumen (etiquetas 'Operación N - ...')."""
+    ws.column_dimensions["B"].width = _ANCHO_COL_OPERACION
 
 
 def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
