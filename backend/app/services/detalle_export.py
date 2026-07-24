@@ -749,6 +749,9 @@ def _construir_detalle_sheet(
 # final de la hoja, después de la sección V.
 _RESUMEN_BANDA = (4, 5)
 _RESUMEN_NCOLS = 4
+# Alto de la fila de valores de la banda (para que el texto del estado, que va
+# en dos líneas, se lea completo).
+_ALTO_BANDA_ESTADO = 32.5
 
 
 def _trasladar_formula(valor, col: str, desde: int, hasta: int):
@@ -850,8 +853,10 @@ def _mover_banda_liquidez(ws) -> None:
     destino = ultima + 2
     for i, fila in enumerate(banda):
         r = destino + i
-        if fila["alto"]:
-            ws.row_dimensions[r].height = fila["alto"]
+        # La última fila de la banda (los valores) lleva un alto mayor.
+        alto = _ALTO_BANDA_ESTADO if i == len(banda) - 1 else fila["alto"]
+        if alto:
+            ws.row_dimensions[r].height = alto
         for c, (valor, estilo) in enumerate(fila["celdas"], start=1):
             cel = ws.cell(r, c)
             # Sus referencias también subieron n filas.
