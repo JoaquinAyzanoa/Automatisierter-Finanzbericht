@@ -756,6 +756,8 @@ _ALTO_BANDA_ESTADO = 32.5
 # desparejos). El texto del estado va menor porque ocupa dos líneas.
 _TAM_BANDA_TEXTO = 11
 _TAM_BANDA_MONTOS = 16
+# Renombrado de rótulos de la banda al moverla.
+_RENOMBRE_BANDA = {"TOTAL A PAGAR (US$)": "TOTAL DE VENTA REQUERIDA (US$)"}
 
 
 def _trasladar_formula(valor, col: str, desde: int, hasta: int):
@@ -864,6 +866,8 @@ def _mover_banda_liquidez(ws) -> None:
             ws.row_dimensions[r].height = alto
         for c, (valor, estilo) in enumerate(fila["celdas"], start=1):
             cel = ws.cell(r, c)
+            if isinstance(valor, str):
+                valor = _RENOMBRE_BANDA.get(valor, valor)
             # Sus referencias también subieron n filas.
             cel.value = _trasladar_formula(
                 valor, get_column_letter(c), fila["row"], fila["row"] - n
