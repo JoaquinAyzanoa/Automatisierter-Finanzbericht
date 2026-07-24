@@ -888,13 +888,14 @@ def _mover_banda_liquidez(ws) -> None:
             ws.conditional_formatting.add(" ".join(rangos), regla)
 
 
-# Ancho de la columna 'Operación' (B) del Resumen.
-_ANCHO_COL_OPERACION = 41.5
+# Anchos fijos de columnas del Resumen: B = 'Operación', C = 'Moneda'.
+_ANCHOS_RESUMEN = {"B": 41.5, "C": 35}
 
 
 def _ajustar_ancho_operacion(ws) -> None:
-    """Fija el ancho de la columna B del Resumen (etiquetas 'Operación N - ...')."""
-    ws.column_dimensions["B"].width = _ANCHO_COL_OPERACION
+    """Fija los anchos de columna del Resumen."""
+    for col, ancho in _ANCHOS_RESUMEN.items():
+        ws.column_dimensions[col].width = ancho
 
 
 def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
