@@ -1222,6 +1222,11 @@ def construir_detalle(
     )
     _rellenar_resumen(wb, total_rows, operaciones)
 
+    # Sin líneas de cuadrícula en ninguna hoja (se hace al final para cubrir
+    # también las que se reconstruyen).
+    for hoja in wb.worksheets:
+        hoja.sheet_view.showGridLines = False
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(output_path)
     return output_path
