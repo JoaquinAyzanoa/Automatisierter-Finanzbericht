@@ -605,6 +605,41 @@ def _construir_detalle_sheet(
         row_map[src_r] = dst_r
         return dst_r + 1
 
+    def emitir_extras(dst_r: int) -> int:
+        """Operaciones creadas en Configuración que la plantilla no tiene (p. ej.
+        una 9ª): se emiten con el estilo de la última operación de la plantilla."""
+        if not ops:
+            return dst_r
+        plantilla_pos = {p for p, _tr in ops.values()}
+        modelo_ds = max(ops)                      # última operación de la plantilla
+        m_total = ops[modelo_ds][1]
+        m_titulo, m_header, m_data = modelo_ds - 2, modelo_ds - 1, modelo_ds
+        alto = src.row_dimensions[m_data].height
+        for pos in sorted(p for p in grupos if p not in plantilla_pos):
+            dst_r += 1  # fila en blanco de separación
+            _copiar_fila_desplazada(src, dst, m_titulo, dst_r, ncols)
+            dst.cell(dst_r, 1).value = _titulo_operacion(
+                pos, op_texto.get(pos), op_moneda.get(pos)
+            )
+            dst_r += 1
+            _copiar_fila_desplazada(src, dst, m_header, dst_r, ncols, es_cabecera=True)
+            dst_r += 1
+            data_ini = dst_r
+            for f in sorted(grupos[pos], key=_key_prov):
+                _escribir_fila(src, m_data, dst, dst_r, f, ncols, sp_cfg, ret_cfg)
+                if alto:
+                    dst.row_dimensions[dst_r].height = alto
+                dst_r += 1
+            data_fin = dst_r - 1
+            _copiar_fila_desplazada(src, dst, m_total, dst_r, ncols)
+            if src.row_dimensions[m_total].height:
+                dst.row_dimensions[dst_r].height = src.row_dimensions[m_total].height
+            dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{data_fin})"
+            total_merges.append(dst_r)
+            total_rows[pos] = dst_r
+            dst_r += 1
+        return dst_r
+
     def emitir_fijas(dst_r: int) -> int:
         """Emite 'PAGOS AL PERSONAL' y 'PAGOS SEGUROS' (en ese orden), cada uno
         precedido de una fila en blanco de separación."""
@@ -678,8 +713,10 @@ def _construir_detalle_sheet(
             total_merges.append(dst_r)
             total_rows[pos] = dst_r
             dst_r += 1
-            # Tras la última operación van las secciones fijas movidas.
+            # Tras la última operación de la plantilla van las operaciones extra
+            # y, después, las secciones fijas movidas.
             if pos == ultima_op:
+                dst_r = emitir_extras(dst_r)
                 dst_r = emitir_fijas(dst_r)
             src_r = total_row + 1
         elif src_r in agentes:
@@ -745,45 +782,6 @@ def _construir_detalle_sheet(
             row_map[src_r] = dst_r
             dst_r += 1
             src_r += 1
-
-    # Operaciones que existen en los datos pero no en la plantilla (p. ej. una
-    # 9ª categoría creada en Configuración): se agregan como secciones nuevas al
-    # final, copiando el estilo de la última operación de la plantilla.
-    plantilla_pos = {p for (p, _tr) in ops.values()}
-    extra = sorted(p for p in grupos if p not in plantilla_pos)
-    if extra:
-        modelo_ds = max(ops)                      # última operación de la plantilla
-        m_total = ops[modelo_ds][1]
-        m_titulo, m_header, m_data = modelo_ds - 2, modelo_ds - 1, modelo_ds
-        for pos in extra:
-            filas = sorted(grupos[pos], key=_key_prov)
-            dst_r += 1  # fila en blanco de separación
-            # Título.
-            _copiar_fila_desplazada(src, dst, m_titulo, dst_r, ncols)
-            dst.cell(dst_r, 1).value = _titulo_operacion(
-                pos, op_texto.get(pos), op_moneda.get(pos)
-            )
-            dst_r += 1
-            # Cabecera.
-            _copiar_fila_desplazada(src, dst, m_header, dst_r, ncols, es_cabecera=True)
-            dst_r += 1
-            # Datos.
-            data_ini = dst_r
-            alto = src.row_dimensions[m_data].height
-            for f in filas:
-                _escribir_fila(src, m_data, dst, dst_r, f, ncols, sp_cfg, ret_cfg)
-                if alto:
-                    dst.row_dimensions[dst_r].height = alto
-                dst_r += 1
-            data_fin = dst_r - 1
-            # TOTAL.
-            _copiar_fila_desplazada(src, dst, m_total, dst_r, ncols)
-            if src.row_dimensions[m_total].height:
-                dst.row_dimensions[dst_r].height = src.row_dimensions[m_total].height
-            dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{data_fin})"
-            dst.merge_cells(start_row=dst_r, start_column=1, end_row=dst_r, end_column=15)
-            total_rows[pos] = dst_r
-            dst_r += 1
 
     # Merges verbatim (de filas copiadas tal cual), con columnas desplazadas.
     for mc in list(src.merged_cells.ranges):
