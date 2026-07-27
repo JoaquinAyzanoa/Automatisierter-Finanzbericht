@@ -606,8 +606,9 @@ def _construir_detalle_sheet(
         return dst_r + 1
 
     def emitir_extras(dst_r: int) -> int:
-        """Operaciones creadas en Configuración que la plantilla no tiene (p. ej.
-        una 9ª): se emiten con el estilo de la última operación de la plantilla."""
+        """Operaciones de Configuración que la plantilla no tiene (p. ej. una 9ª).
+        Se emiten con el estilo de la última operación de la plantilla, y también
+        si no tienen facturas (con sus filas en blanco, como las de la plantilla)."""
         if not ops:
             return dst_r
         plantilla_pos = {p for p, _tr in ops.values()}
@@ -615,7 +616,8 @@ def _construir_detalle_sheet(
         m_total = ops[modelo_ds][1]
         m_titulo, m_header, m_data = modelo_ds - 2, modelo_ds - 1, modelo_ds
         alto = src.row_dimensions[m_data].height
-        for pos in sorted(p for p in grupos if p not in plantilla_pos):
+        pos_config = {o["pos"] for o in operaciones} | set(grupos)
+        for pos in sorted(p for p in pos_config if p not in plantilla_pos):
             dst_r += 1  # fila en blanco de separación
             _copiar_fila_desplazada(src, dst, m_titulo, dst_r, ncols)
             dst.cell(dst_r, 1).value = _titulo_operacion(
@@ -625,11 +627,20 @@ def _construir_detalle_sheet(
             _copiar_fila_desplazada(src, dst, m_header, dst_r, ncols, es_cabecera=True)
             dst_r += 1
             data_ini = dst_r
-            for f in sorted(grupos[pos], key=_key_prov):
-                _escribir_fila(src, m_data, dst, dst_r, f, ncols, sp_cfg, ret_cfg)
-                if alto:
-                    dst.row_dimensions[dst_r].height = alto
-                dst_r += 1
+            filas = sorted(grupos.get(pos, []), key=_key_prov)
+            if filas:
+                for f in filas:
+                    _escribir_fila(src, m_data, dst, dst_r, f, ncols, sp_cfg, ret_cfg)
+                    if alto:
+                        dst.row_dimensions[dst_r].height = alto
+                    dst_r += 1
+            else:
+                # Sin datos: conservar las filas en blanco de la plantilla.
+                for rr in range(m_data, m_total):
+                    _copiar_fila_desplazada(src, dst, rr, dst_r, ncols)
+                    if src.row_dimensions[rr].height:
+                        dst.row_dimensions[dst_r].height = src.row_dimensions[rr].height
+                    dst_r += 1
             data_fin = dst_r - 1
             _copiar_fila_desplazada(src, dst, m_total, dst_r, ncols)
             if src.row_dimensions[m_total].height:
