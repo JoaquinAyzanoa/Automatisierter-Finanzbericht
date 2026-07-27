@@ -443,6 +443,21 @@ def _rango_seccion(ws: Worksheet, regex) -> tuple[int, int, int] | None:
     return data_row - 2, data_row, secciones[data_row]
 
 
+def _fila_vacia(ws: Worksheet, r: int, ncols: int) -> bool:
+    return all(ws.cell(r, c).value in (None, "") for c in range(1, ncols + 1))
+
+
+def _rango_a_saltar(ws: Worksheet, sec, ncols: int) -> tuple[int, int] | None:
+    """Filas a omitir de una sección movida: el bloque y la fila en blanco que lo
+    precede (si no, quedarían separadores de más donde estaba)."""
+    if not sec:
+        return None
+    ini = sec[0]
+    if ini > 1 and _fila_vacia(ws, ini - 1, ncols):
+        ini -= 1
+    return ini, sec[2]
+
+
 # Columna Neto en la hoja 'Detalle de agentes' (para las fórmulas de enlace).
 _COL_NETO_AG = 15
 
@@ -619,8 +634,20 @@ def _construir_detalle_sheet(
 
     dst_r = 1
     src_r = 1
-    while src_r <= src.max_row:
-        if any(s and s[0] <= src_r <= s[2] for s in (personal, seguros)):
+    saltar = [
+        r for r in (_rango_a_saltar(src, personal, ncols),
+                    _rango_a_saltar(src, seguros, ncols)) if r
+    ]
+    # La plantilla arrastra filas sobrantes después de la última sección (con
+    # restos de datos en columnas lejanas): el recorrido se corta ahí.
+    fin_util = max(
+        [tr for _pos, tr in ops.values()]
+        + [tr for _mon, tr in agentes.values()]
+        + [s[2] for s in (personal, seguros) if s]
+        or [src.max_row]
+    )
+    while src_r <= fin_util:
+        if any(a <= src_r <= b for a, b in saltar):
             src_r += 1  # esos bloques se emiten más abajo, tras la última operación
             continue
         if src_r in ops:
