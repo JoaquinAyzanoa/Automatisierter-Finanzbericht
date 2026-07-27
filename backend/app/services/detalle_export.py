@@ -50,11 +50,20 @@ _PLANTILLA = Path(__file__).resolve().parent.parent / "resources" / "plantilla.x
 _DATETIME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})[ T]\d{2}:\d{2}:\d{2}")
 _OPERACION_RE = re.compile(r"^\s*Operaci.n\s+(\d+)", re.IGNORECASE)
 
-# Aseguradoras con las que se trabaja hoy (sección 'PAGOS SEGUROS'). La
-# plantilla trae una lista más larga; aquí se reemplaza por estas filas.
+# Filas vigentes de las secciones fijas. La plantilla trae listas distintas;
+# estas son las que se emiten (editar aquí para agregar o quitar entradas).
 _SEGUROS_PROVEEDORES = [
     "RIMAC S.A. ENTIDAD PRESTADORA DE SALUD",
     "RIMAC SEGUROS Y REASEGUROS",
+]
+_PERSONAL_PROVEEDORES = [
+    "BANCO BCP",
+    "BANCO BBVA",
+    "BANCO INTERBANK",
+    "BANCO SCOTIABANK",
+    "BANCO FALABELLA",
+    "SINDICATO DE TRABAJADORES RENASA",
+    "MARY OLGA SAICO  ICHPAS ",
 ]
 
 # Detalle (SALIDA): columna (1-based) -> clave de texto en los datos.
@@ -651,31 +660,35 @@ def _construir_detalle_sheet(
             dst_r += 1
         return dst_r
 
+    def emitir_seccion_fija(sec, nombres, dst_r: int) -> int:
+        """Título, cabecera, una fila por nombre (con el estilo de la fila modelo)
+        y TOTAL. La lista sale de las constantes, no de la plantilla, así que el
+        TOTAL se recalcula sobre las filas realmente emitidas."""
+        titulo, modelo, total_row = sec
+        dst_r += 1  # fila en blanco de separación
+        dst_r = copiar_fila(titulo, dst_r)
+        dst_r = copiar_fila(modelo - 1, dst_r)          # cabecera
+        alto = src.row_dimensions[modelo].height
+        data_ini = dst_r
+        for nombre in nombres:
+            _copiar_fila_desplazada(src, dst, modelo, dst_r, ncols)
+            dst.cell(dst_r, 1).value = nombre
+            if alto:
+                dst.row_dimensions[dst_r].height = alto
+            dst_r += 1
+        _copiar_fila_desplazada(src, dst, total_row, dst_r, ncols)
+        if src.row_dimensions[total_row].height:
+            dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
+        dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{dst_r - 1})"
+        total_merges.append(dst_r)
+        return dst_r + 1
+
     def emitir_fijas(dst_r: int) -> int:
-        """Emite 'PAGOS AL PERSONAL' y 'PAGOS SEGUROS' (en ese orden), cada uno
-        precedido de una fila en blanco de separación."""
+        """Emite 'PAGOS AL PERSONAL' y 'PAGOS SEGUROS' (en ese orden)."""
         if personal:
-            dst_r += 1
-            for rr in range(personal[0], personal[2] + 1):
-                dst_r = copiar_fila(rr, dst_r)
+            dst_r = emitir_seccion_fija(personal, _PERSONAL_PROVEEDORES, dst_r)
         if seguros:
-            titulo, modelo, total_row = seguros
-            dst_r += 1
-            dst_r = copiar_fila(titulo, dst_r)
-            dst_r = copiar_fila(modelo - 1, dst_r)          # cabecera
-            # Solo las aseguradoras vigentes (la plantilla trae una lista mayor).
-            alto = src.row_dimensions[modelo].height
-            for nombre in _SEGUROS_PROVEEDORES:
-                _copiar_fila_desplazada(src, dst, modelo, dst_r, ncols)
-                dst.cell(dst_r, 1).value = nombre
-                if alto:
-                    dst.row_dimensions[dst_r].height = alto
-                dst_r += 1
-            _copiar_fila_desplazada(src, dst, total_row, dst_r, ncols)
-            if src.row_dimensions[total_row].height:
-                dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
-            total_merges.append(dst_r)
-            dst_r += 1
+            dst_r = emitir_seccion_fija(seguros, _SEGUROS_PROVEEDORES, dst_r)
         return dst_r
 
     dst_r = 1
