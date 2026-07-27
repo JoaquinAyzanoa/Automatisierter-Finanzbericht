@@ -52,10 +52,6 @@ _OPERACION_RE = re.compile(r"^\s*Operaci.n\s+(\d+)", re.IGNORECASE)
 
 # Filas vigentes de las secciones fijas. La plantilla trae listas distintas;
 # estas son las que se emiten (editar aquí para agregar o quitar entradas).
-_SEGUROS_PROVEEDORES = [
-    "RIMAC S.A. ENTIDAD PRESTADORA DE SALUD",
-    "RIMAC SEGUROS Y REASEGUROS",
-]
 _PERSONAL_PROVEEDORES = [
     "BANCO BCP",
     "BANCO BBVA",
@@ -65,6 +61,12 @@ _PERSONAL_PROVEEDORES = [
     "SINDICATO DE TRABAJADORES RENASA",
     "MARY OLGA SAICO  ICHPAS ",
 ]
+# La sección que la plantilla titula 'PAGOS SEGUROS' se emite como 'PAGOS
+# ANTICIPADOS' y hoy va sin filas fijas: se llenan a mano.
+_ANTICIPADOS_TITULO = "PAGOS ANTICIPADOS"
+_ANTICIPADOS_PROVEEDORES: list[str] = []
+# Filas en blanco que se dejan cuando una sección fija no tiene entradas.
+_FILAS_EN_BLANCO_SECCION = 2
 
 # Detalle (SALIDA): columna (1-based) -> clave de texto en los datos.
 _TXT = {
@@ -660,17 +662,20 @@ def _construir_detalle_sheet(
             dst_r += 1
         return dst_r
 
-    def emitir_seccion_fija(sec, nombres, dst_r: int) -> int:
+    def emitir_seccion_fija(sec, nombres, dst_r: int, titulo_texto=None) -> int:
         """Título, cabecera, una fila por nombre (con el estilo de la fila modelo)
         y TOTAL. La lista sale de las constantes, no de la plantilla, así que el
-        TOTAL se recalcula sobre las filas realmente emitidas."""
+        TOTAL se recalcula sobre las filas realmente emitidas. Sin entradas, se
+        dejan filas en blanco para llenarlas a mano."""
         titulo, modelo, total_row = sec
         dst_r += 1  # fila en blanco de separación
         dst_r = copiar_fila(titulo, dst_r)
+        if titulo_texto:
+            dst.cell(dst_r - 1, 1).value = titulo_texto
         dst_r = copiar_fila(modelo - 1, dst_r)          # cabecera
         alto = src.row_dimensions[modelo].height
         data_ini = dst_r
-        for nombre in nombres:
+        for nombre in nombres or [None] * _FILAS_EN_BLANCO_SECCION:
             _copiar_fila_desplazada(src, dst, modelo, dst_r, ncols)
             dst.cell(dst_r, 1).value = nombre
             if alto:
@@ -684,11 +689,13 @@ def _construir_detalle_sheet(
         return dst_r + 1
 
     def emitir_fijas(dst_r: int) -> int:
-        """Emite 'PAGOS AL PERSONAL' y 'PAGOS SEGUROS' (en ese orden)."""
+        """Emite 'PAGOS AL PERSONAL' y 'PAGOS ANTICIPADOS' (en ese orden)."""
         if personal:
             dst_r = emitir_seccion_fija(personal, _PERSONAL_PROVEEDORES, dst_r)
         if seguros:
-            dst_r = emitir_seccion_fija(seguros, _SEGUROS_PROVEEDORES, dst_r)
+            dst_r = emitir_seccion_fija(
+                seguros, _ANTICIPADOS_PROVEEDORES, dst_r, _ANTICIPADOS_TITULO
+            )
         return dst_r
 
     dst_r = 1
