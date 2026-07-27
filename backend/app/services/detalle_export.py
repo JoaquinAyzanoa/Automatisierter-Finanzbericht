@@ -34,14 +34,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from app.services import sharepoint
 
-# --- Columnas de la SALIDA (dst) ---
-# Respecto de la plantilla: se inserta 'RUC' en la 2, el 'Neto' se desdobla en
-# dos columnas (soles y dólares) y se omite 'N° Registro'.
+# --- Columnas de la SALIDA (dst): RUC insertada en la 2 y sin 'N° Registro' ---
 _COL_RUC = 2
-_COL_NETO_SOL = 16
-_COL_NETO_USD = 17
 # Columna SUSTENTO / LINK FACTURA (donde va el hipervínculo al PDF).
-_COL_LINK = 20
+_COL_LINK = 19
 _LINK_FONT = Font(color="0563C1", underline="single")
 
 # Columna DET: formato contable con 2 decimales (cero -> guion).
@@ -66,7 +62,7 @@ _SEGUROS_PROVEEDORES = [
 _TXT = {
     1: "PROVEEDOR", 2: "RUC", 3: "TIPO", 4: "NUMERO",
     5: "FEC REGISTRO", 6: "FECHA DOC.", 7: "FEC. VCTO",
-    18: "PRODUCTO", 19: "ORD_COMPRA", 20: "REGISTRO",
+    17: "PRODUCTO", 18: "ORD_COMPRA", 19: "REGISTRO",
 }
 _FECHA_COLS = {5, 6, 7}
 
@@ -126,11 +122,6 @@ def _fmt_tipo(v) -> str:
 def _key_prov(f) -> str:
     """Clave para ordenar filas por PROVEEDOR (alfabético, sin distinguir may/min)."""
     return str(f.get("PROVEEDOR", "")).strip().upper()
-
-
-def _moneda_clave(f) -> str:
-    """'SOL' o 'USD' (todo lo que no sea soles se trata como dólares)."""
-    return "SOL" if str(f.get("MONEDA", "")).strip().upper() == "SOL" else "USD"
 
 
 # Retención de IGV (SUNAT): 3% del IMPORTE en facturas de bienes que superan
@@ -321,25 +312,19 @@ def _copiar_celda(s, d, src_r: int, dst_r: int, src_col: int, dst_col: int) -> N
     d.value = v
 
 
-# Columnas de la plantilla (src) con tratamiento especial.
-# 'Neto' se desdobla en dos (soles y dólares); 'N° Registro' se omite porque
-# SUSTENTO ya muestra ese mismo número, con el hipervínculo al PDF.
-_SRC_COL_NETO = 15
+# Columna 'N° Registro' de la plantilla (src). Se omite en la salida: SUSTENTO
+# ya muestra ese mismo número, con el hipervínculo al PDF.
 _SRC_COL_OMITIDA = 18
 
 
 def _nc(c: int) -> int | None:
-    """Columna src (plantilla) -> columna dst (salida). None = suprimida."""
+    """Columna src (plantilla) -> columna dst (salida): inserta RUC en la 2 y
+    omite 'N° Registro' (devuelve None para esa columna)."""
     if c == 1:
         return 1
     if c == _SRC_COL_OMITIDA:
         return None
-    d = c + 1                          # 'RUC' insertada en la 2
-    if c > _SRC_COL_NETO:
-        d += 1                         # segunda columna de 'Neto'
-    if c > _SRC_COL_OMITIDA:
-        d -= 1                         # 'N° Registro' suprimida
-    return d
+    return c + 1 if c < _SRC_COL_OMITIDA else c
 
 
 def _nc_rango(c1: int, c2: int) -> tuple[int, int]:
@@ -377,13 +362,8 @@ def _copiar_fila_desplazada(
     # Columna RUC (2) con el estilo de la columna TIPO (src col 2).
     _clonar_estilo(dst.cell(dst_r, _COL_RUC), src.cell(src_r, 2))
     dst.cell(dst_r, _COL_RUC).value = "RUC" if es_cabecera else ruc_val
-    # Segunda columna de 'Neto' (dólares), con el estilo de la primera.
-    _clonar_estilo(dst.cell(dst_r, _COL_NETO_USD), dst.cell(dst_r, _COL_NETO_SOL))
-    dst.cell(dst_r, _COL_NETO_USD).value = None
+    # Los encabezados de columna van centrados horizontalmente.
     if es_cabecera:
-        dst.cell(dst_r, _COL_NETO_SOL).value = "Neto S/"
-        dst.cell(dst_r, _COL_NETO_USD).value = "Neto US$"
-        # Los encabezados de columna van centrados horizontalmente.
         for c in range(1, _COL_LINK + 1):
             _centrar_horizontal(dst.cell(dst_r, c))
 
@@ -493,8 +473,7 @@ def _ref_agentes(fila: int) -> str:
 
 
 def _escribir_resumen_agente(
-    src, estilo_row, dst, r, nombre, ruc, oc, total, ncols_src, ref_row=None,
-    moneda="SOL",
+    src, estilo_row, dst, r, nombre, ruc, oc, total, ncols_src, ref_row=None
 ):
     """Fila resumen de la sección Agentes: nombre, RUC y O/C del agente y el
     total (Neto) a depositar. Si se da `ref_row`, el total se enlaza por fórmula
@@ -504,16 +483,12 @@ def _escribir_resumen_agente(
         dst.cell(r, c).value = None
     dst.cell(r, 1).value = nombre      # PROVEEDOR
     dst.cell(r, _COL_RUC).value = ruc  # RUC (del agente de la col A)
-    # Neto en la columna de su moneda.
-    col_neto = (
-        _COL_NETO_SOL if str(moneda).strip().upper() == "SOL" else _COL_NETO_USD
-    )
-    dst.cell(r, col_neto).value = _ref_agentes(ref_row) if ref_row else total
-    dst.cell(r, 18).value = nombre     # AGENTE ADUANERO
-    dst.cell(r, 19).value = oc         # N° O/C-O/S
+    dst.cell(r, 16).value = _ref_agentes(ref_row) if ref_row else total  # Neto (P)
+    dst.cell(r, 17).value = nombre     # AGENTE ADUANERO
+    dst.cell(r, 18).value = oc         # N° O/C-O/S
     for c in _COLS_CENTRAR:  # RUC y demás columnas de identificación: centradas
         _centrar_horizontal(dst.cell(r, c))
-    _centrar_horizontal(dst.cell(r, 19))  # N° O/C-O/S centrado
+    _centrar_horizontal(dst.cell(r, 18))  # N° O/C-O/S centrado
 
 
 def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=None) -> None:
@@ -534,7 +509,7 @@ def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=Non
     for c in _COLS_CENTRAR:  # RUC, TIPO, N° DOC y fechas: centrados
         _centrar_horizontal(dst.cell(r, c))
     _centrar_horizontal(dst.cell(r, 12))  # %DET centrado
-    _centrar_horizontal(dst.cell(r, 19))  # N° O/C-O/S centrado
+    _centrar_horizontal(dst.cell(r, 18))  # N° O/C-O/S centrado
     # Fechas como fecha real (para que PLAZO pueda restarlas).
     for c in _FECHA_COLS:
         if isinstance(vals.get(c), date):
@@ -556,11 +531,8 @@ def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=Non
     dst.cell(r, 14).border = copy(dst.cell(r, 12).border)
     dst.cell(r, 15).value = f"=ROUND(N{r}*H{r},2)"
     dst.cell(r, 15).number_format = _DET_FMT
-    # Neto (fórmula viva): SALDO(J), DET(M), PAGADO(I), RET(O). Va a la columna
-    # de su moneda; la otra queda vacía.
-    es_sol = str(fila.get("MONEDA", "")).strip().upper() == "SOL"
-    col_neto = _COL_NETO_SOL if es_sol else _COL_NETO_USD
-    dst.cell(r, col_neto).value = (
+    # Neto (fórmula viva): SALDO(J), DET(M), PAGADO(I), RET(O).
+    dst.cell(r, 16).value = (
         f"=IF(AND(M{r}>0,ABS(I{r}-M{r})<1),J{r},"
         f"IF(AND(M{r}>0,I{r}=0),J{r}-M{r},J{r}))-O{r}"
     )
@@ -651,7 +623,7 @@ def _construir_detalle_sheet(
         dst.column_dimensions[get_column_letter(c)].width = w
 
     row_map: dict = {}
-    rubros_info: list = []  # un dict por rubro emitido (ver emitir_rubro)
+    total_rows: dict = {}   # pos -> fila TOTAL (destino) de esa operación
     total_merges: list = []
 
     # --- Secciones de la plantilla, con sus filas de origen ---
@@ -706,104 +678,84 @@ def _construir_detalle_sheet(
             row_map[src_r] = dst_r
         return dst_r + 1
 
-    def emitir_rubro(nombre: str, secs: list, dst_r: int) -> tuple[int, dict]:
-        """Un bloque por rubro: banda, una cabecera, todas sus filas (soles y
-        dólares juntos) y un TOTAL con las dos monedas."""
-        modelo_sec = secs[0]
-        tipo = modelo_sec["tipo"]
-        modelo, total_row = modelo_sec["data"], modelo_sec["total"]
-        alto = src.row_dimensions[modelo].height
-        # Las secciones 'extra' reutilizan filas ya emitidas: no deben
-        # sobrescribir el mapa de merges.
-        mapear = not modelo_sec.get("extra")
+    def emitir_seccion(s: dict, dst_r: int) -> tuple[int, int]:
+        """Escribe título, cabecera, datos y TOTAL. Devuelve (dst_r, fila_total)."""
+        pos, tipo = s["pos"], s["tipo"]
+        # Las secciones 'extra' reutilizan filas de la plantilla ya emitidas por
+        # otra sección: no deben sobrescribir el mapa de merges.
+        mapear = not s.get("extra")
 
-        # Banda del rubro (hace de título de la sección).
-        if banda_modelo:
-            _copiar_fila_desplazada(src, dst, banda_modelo, dst_r, ncols)
-            if src.row_dimensions[banda_modelo].height:
-                dst.row_dimensions[dst_r].height = src.row_dimensions[banda_modelo].height
-        dst.cell(dst_r, 1).value = nombre
-        dst.merge_cells(start_row=dst_r, start_column=1, end_row=dst_r,
-                        end_column=_COL_LINK)
-        dst_r += 1
-        dst_r = copiar(modelo_sec["header"], dst_r, cabecera=True, mapear=mapear)
+        dst_r = copiar(s["titulo"], dst_r, mapear=mapear)
+        if tipo == "operacion":
+            dst.cell(dst_r - 1, 1).value = _titulo_operacion(
+                pos, op_texto.get(pos), op_moneda.get(pos)
+            )
+        dst_r = copiar(s["header"], dst_r, cabecera=True, mapear=mapear)
 
         data_ini = dst_r
-        hay = {"SOL": False, "USD": False}
+        modelo, total_row = s["data"], s["total"]
+        alto = src.row_dimensions[modelo].height
         if tipo == "operacion":
-            # Todas las operaciones del rubro, soles primero y luego dólares.
-            filas = [f for s in secs for f in grupos.get(s["pos"], [])]
-            filas.sort(key=lambda f: (
-                str(f.get("MONEDA", "")).strip().upper() != "SOL", _key_prov(f)
-            ))
-            for f in filas:
-                _escribir_fila(src, modelo, dst, dst_r, f, ncols, sp_cfg, ret_cfg)
-                if alto:
-                    dst.row_dimensions[dst_r].height = alto
-                hay[_moneda_clave(f)] = True
-                dst_r += 1
+            filas = sorted(grupos.get(pos, []), key=_key_prov)
+            if filas:
+                for f in filas:
+                    _escribir_fila(src, modelo, dst, dst_r, f, ncols, sp_cfg, ret_cfg)
+                    if alto:
+                        dst.row_dimensions[dst_r].height = alto
+                    dst_r += 1
+            else:  # sin datos: se conservan las filas en blanco de la plantilla
+                for rr in range(modelo, total_row):
+                    dst_r = copiar(rr, dst_r, mapear=mapear)
         elif tipo == "agentes":
-            # Una fila resumen por O/C (de ambas monedas), ordenadas igual.
+            # Una fila resumen por O/C (agente, RUC, N° O/C-O/S y total).
             resumen = sorted(
-                grupos_agentes.items(),
-                key=lambda kv: (kv[0][1] != "SOL", kv[0][0]),
+                ((oc, fs) for (oc, mon), fs in grupos_agentes.items()
+                 if mon == s["moneda"]),
+                key=lambda x: x[0],
             )
-            for (oc, mon), fs in resumen:
-                _escribir_resumen_agente(
-                    src, modelo, dst, dst_r,
-                    nombre_por_oc.get(oc, ""), ruc_por_oc.get(oc, ""),
-                    oc, round(sum(_neto(f, ret_cfg) for f in fs), 2), ncols,
-                    ref_agentes["oc"].get((oc, mon)), mon,
-                )
-                if alto:
-                    dst.row_dimensions[dst_r].height = alto
-                hay["SOL" if mon == "SOL" else "USD"] = True
-                dst_r += 1
+            if resumen:
+                for oc, fs in resumen:
+                    _escribir_resumen_agente(
+                        src, modelo, dst, dst_r,
+                        nombre_por_oc.get(oc, ""), ruc_por_oc.get(oc, ""),
+                        oc, round(sum(_neto(f, ret_cfg) for f in fs), 2), ncols,
+                        ref_agentes["oc"].get((oc, s["moneda"])),
+                    )
+                    if alto:
+                        dst.row_dimensions[dst_r].height = alto
+                    dst_r += 1
+            else:
+                for rr in range(modelo, total_row):
+                    dst_r = copiar(rr, dst_r, mapear=mapear)
         elif tipo == "seguros":
             # Solo las aseguradoras vigentes (la plantilla trae más).
-            for prov in _SEGUROS_PROVEEDORES:
+            for nombre in _SEGUROS_PROVEEDORES:
                 _copiar_fila_desplazada(src, dst, modelo, dst_r, ncols)
-                dst.cell(dst_r, 1).value = prov
+                dst.cell(dst_r, 1).value = nombre
                 if alto:
                     dst.row_dimensions[dst_r].height = alto
                 dst_r += 1
-            hay["SOL"] = True
         else:  # personal: filas fijas de la plantilla (bancos)
             for rr in range(modelo, total_row):
                 dst_r = copiar(rr, dst_r, mapear=mapear)
-            hay["SOL"] = True
-        if dst_r == data_ini:  # rubro sin filas: dejar una en blanco
-            dst_r = copiar(modelo, dst_r, mapear=mapear)
         data_fin = dst_r - 1
 
-        # TOTAL del rubro, con una suma por moneda.
+        # Fila TOTAL de la sección.
         fila_total = dst_r
         dst_r = copiar(total_row, dst_r, mapear=False)
-        dst.cell(fila_total, 1).value = f"TOTAL {nombre}"
-        col_sol = get_column_letter(_COL_NETO_SOL)
-        col_usd = get_column_letter(_COL_NETO_USD)
-        if tipo == "agentes":
-            # Los totales jalan del 'Detalle de agentes' (por moneda).
-            for mon, col in (("SOL", _COL_NETO_SOL), ("USD", _COL_NETO_USD)):
-                ref = ref_agentes["moneda"].get(mon)
-                letra = col_sol if mon == "SOL" else col_usd
-                dst.cell(fila_total, col).value = (
-                    _ref_agentes(ref) if ref
-                    else f"=SUM({letra}{data_ini}:{letra}{data_fin})"
+        if tipo == "operacion":
+            dst.cell(fila_total, 16).value = f"=SUM(P{data_ini}:P{data_fin})"
+            total_rows[pos] = fila_total
+        elif tipo == "agentes":
+            ref_total = ref_agentes["moneda"].get(s["moneda"])
+            if grupos_agentes:
+                # El TOTAL jala el 'TOTAL <moneda>' del Detalle de agentes.
+                dst.cell(fila_total, 16).value = (
+                    _ref_agentes(ref_total) if ref_total
+                    else f"=SUM(P{data_ini}:P{data_fin})"
                 )
-        else:
-            dst.cell(fila_total, _COL_NETO_SOL).value = (
-                f"=SUM({col_sol}{data_ini}:{col_sol}{data_fin})"
-            )
-            dst.cell(fila_total, _COL_NETO_USD).value = (
-                f"=SUM({col_usd}{data_ini}:{col_usd}{data_fin})"
-            )
         total_merges.append(fila_total)
-        return dst_r + 1, {  # +1: fila en blanco entre rubros
-            "nombre": nombre, "fila": fila_total,
-            "sol": hay["SOL"], "usd": hay["USD"],
-            "pos": [s["pos"] for s in secs if s["pos"]],
-        }
+        return dst_r, fila_total
 
     # --- Emisión: encabezado + un bloque por rubro ---
     dst_r = 1
@@ -814,8 +766,29 @@ def _construir_detalle_sheet(
         secs = por_rubro.get(idx)
         if not secs:
             continue
-        dst_r, info = emitir_rubro(nombre_rubro, secs, dst_r)
-        rubros_info.append(info)
+        # Banda del rubro.
+        if banda_modelo:
+            _copiar_fila_desplazada(src, dst, banda_modelo, dst_r, ncols)
+            if src.row_dimensions[banda_modelo].height:
+                dst.row_dimensions[dst_r].height = src.row_dimensions[banda_modelo].height
+        dst.cell(dst_r, 1).value = nombre_rubro
+        dst.merge_cells(start_row=dst_r, start_column=1, end_row=dst_r,
+                        end_column=_COL_LINK)
+        dst_r += 1
+
+        totales_rubro: list[int] = []
+        for s in secs:
+            dst_r, fila_total = emitir_seccion(s, dst_r)
+            totales_rubro.append(fila_total)
+            dst_r += 1  # separación entre secciones
+
+        # Subtotal del rubro (misma pinta que un TOTAL de sección).
+        if banda_modelo and totales_rubro:
+            _copiar_fila_desplazada(src, dst, secs[0]["total"], dst_r, ncols)
+            dst.cell(dst_r, 1).value = f"SUBTOTAL {nombre_rubro}"
+            dst.cell(dst_r, 16).value = "=" + "+".join(f"P{t}" for t in totales_rubro)
+            total_merges.append(dst_r)
+            dst_r += 2  # separación entre rubros
 
     # Merges verbatim (de filas copiadas tal cual), con columnas desplazadas.
     for mc in list(src.merged_cells.ranges):
@@ -824,10 +797,9 @@ def _construir_detalle_sheet(
                 start_row=row_map[mc.min_row], start_column=_nc_rango(mc.min_col, mc.max_col)[0],
                 end_row=row_map[mc.max_row], end_column=_nc_rango(mc.min_col, mc.max_col)[1],
             )
-    # Merges de las filas TOTAL de cada rubro (A hasta antes de 'Neto S/').
+    # Merges de las filas TOTAL de las secciones Operación/Agentes (A:O).
     for tr in total_merges:
-        dst.merge_cells(start_row=tr, start_column=1, end_row=tr,
-                        end_column=_COL_NETO_SOL - 1)
+        dst.merge_cells(start_row=tr, start_column=1, end_row=tr, end_column=15)
 
     # Título con el rango de fechas.
     rango = ""
@@ -840,7 +812,7 @@ def _construir_detalle_sheet(
     del wb["Detalle"]
     dst.title = "Detalle"
     wb.move_sheet("Detalle", offset=pos_idx - wb.sheetnames.index("Detalle"))
-    return rubros_info
+    return total_rows
 
 
 # Banda 'ESTADO DE LIQUIDEZ' del Resumen (cabecera + valores) que se mueve al
@@ -868,70 +840,6 @@ def _trasladar_formula(valor, col: str, desde: int, hasta: int):
         )
     except Exception:
         return valor
-
-
-def _desplazar_filas(ws, desde: int, n: int) -> None:
-    """Inserta (n>0) o borra (n<0) `n` filas a partir de `desde`.
-
-    openpyxl no ajusta fórmulas, celdas combinadas ni formato condicional al
-    mover filas: quedarían desfasados (taparían contenido o pintarían celdas
-    equivocadas). Aquí se guardan, se limpian y se rearman con las filas nuevas.
-    """
-    if not n:
-        return
-    merges = [
-        (m.min_row, m.min_col, m.max_row, m.max_col)
-        for m in list(ws.merged_cells.ranges)
-    ]
-    for m in list(ws.merged_cells.ranges):
-        ws.unmerge_cells(str(m))
-    cond = [(str(cf.sqref), list(cf.rules)) for cf in ws.conditional_formatting]
-    ws.conditional_formatting = ConditionalFormattingList()
-
-    if n > 0:
-        ws.insert_rows(desde, n)
-    else:
-        ws.delete_rows(desde, -n)
-
-    # Las filas que se movieron arrastran sus fórmulas: hay que trasladarlas.
-    for row in ws.iter_rows(min_row=desde, max_row=ws.max_row):
-        for cel in row:
-            v = cel.value
-            if not (isinstance(v, str) and v.startswith("=")):
-                continue
-            nuevo = _trasladar_formula(
-                v, get_column_letter(cel.column), cel.row - n, cel.row
-            )
-            if nuevo != v:
-                cel.value = nuevo
-
-    def _nueva(r: int):
-        if r < desde:
-            return r                    # arriba de lo movido: sin cambio
-        if n < 0 and r < desde - n:
-            return None                 # fila borrada
-        return r + n
-
-    for min_r, min_c, max_r, max_c in merges:
-        f1, f2 = _nueva(min_r), _nueva(max_r)
-        if f1 is None or f2 is None or f2 < f1:
-            continue
-        ws.merge_cells(start_row=f1, start_column=min_c, end_row=f2, end_column=max_c)
-
-    for sqref, reglas in cond:
-        rangos = []
-        for parte in str(sqref).split():
-            cr = CellRange(parte)
-            f1, f2 = _nueva(cr.min_row), _nueva(cr.max_row)
-            if f1 is None or f2 is None:
-                continue
-            rangos.append(
-                f"{get_column_letter(cr.min_col)}{f1}:"
-                f"{get_column_letter(cr.max_col)}{f2}"
-            )
-        if rangos:
-            for regla in reglas:
-                ws.conditional_formatting.add(" ".join(rangos), regla)
 
 
 def _mover_banda_liquidez(ws) -> None:
@@ -971,12 +879,40 @@ def _mover_banda_liquidez(ws) -> None:
         for r in range(r_ini, r_fin + 1)
     ]
 
-    # El formato condicional de la banda (el semáforo) se pierde al borrarla:
-    # se guarda para reubicarlo junto con ella.
-    cond = [(str(cf.sqref), list(cf.rules)) for cf in ws.conditional_formatting]
-
     # Borrar la banda y su separador: todo lo de abajo sube n filas.
-    _desplazar_filas(ws, r_borrar, -n)
+    # openpyxl no ajusta merges ni formato condicional al borrar filas (quedarían
+    # desfasados: taparían contenido o pintarían celdas equivocadas). Se guardan,
+    # se limpian y se rearman con las filas nuevas.
+    merges = [
+        (m.min_row, m.min_col, m.max_row, m.max_col)
+        for m in list(ws.merged_cells.ranges)
+    ]
+    for m in list(ws.merged_cells.ranges):
+        ws.unmerge_cells(str(m))
+
+    cond = [(str(cf.sqref), list(cf.rules)) for cf in ws.conditional_formatting]
+    ws.conditional_formatting = ConditionalFormattingList()
+
+    ws.delete_rows(r_borrar, n)
+    for row in ws.iter_rows(min_row=r_borrar, max_row=ws.max_row):
+        for cel in row:
+            v = cel.value
+            if not (isinstance(v, str) and v.startswith("=")):
+                continue
+            nuevo = _trasladar_formula(
+                v, get_column_letter(cel.column), cel.row + n, cel.row
+            )
+            if nuevo != v:
+                cel.value = nuevo
+
+    for min_r, min_c, max_r, max_c in merges:
+        if max_r < r_borrar:
+            f1, f2 = min_r, max_r          # arriba de lo borrado: sin cambio
+        elif min_r >= r_borrar + n:
+            f1, f2 = min_r - n, max_r - n  # abajo: sube n filas
+        else:
+            continue                       # estaba dentro de lo borrado
+        ws.merge_cells(start_row=f1, start_column=min_c, end_row=f2, end_column=max_c)
 
     # Escribir la banda al final, dejando una fila en blanco de separación.
     ultima = max(
@@ -1022,21 +958,31 @@ def _mover_banda_liquidez(ws) -> None:
                     vertAlign=f.vertAlign, underline=f.underline, strike=f.strike,
                 )
 
-    # Reubicar el formato condicional que vivía DENTRO de la banda (el semáforo);
-    # el del resto de la hoja ya lo reacomodó _desplazar_filas.
+    # Rearmar el formato condicional con las filas nuevas.
+    def _fila_nueva(r: int):
+        if r_ini <= r <= r_fin:
+            return destino + (r - r_ini)   # estaba en la banda: se fue al final
+        if r < r_borrar:
+            return r                       # arriba de lo borrado
+        if r >= r_borrar + n:
+            return r - n                   # abajo: sube n
+        return None                        # fila borrada
+
     for sqref, reglas in cond:
         rangos = []
         for parte in str(sqref).split():
             cr = CellRange(parte)
-            if not (r_ini <= cr.min_row <= r_fin and r_ini <= cr.max_row <= r_fin):
+            f1, f2 = _fila_nueva(cr.min_row), _fila_nueva(cr.max_row)
+            if f1 is None or f2 is None:
                 continue
             rangos.append(
-                f"{get_column_letter(cr.min_col)}{destino + (cr.min_row - r_ini)}:"
-                f"{get_column_letter(cr.max_col)}{destino + (cr.max_row - r_ini)}"
+                f"{get_column_letter(cr.min_col)}{f1}:"
+                f"{get_column_letter(cr.max_col)}{f2}"
             )
-        if rangos:
-            for regla in reglas:
-                ws.conditional_formatting.add(" ".join(rangos), regla)
+        if not rangos:
+            continue
+        for regla in reglas:
+            ws.conditional_formatting.add(" ".join(rangos), regla)
 
 
 # Anchos fijos de columnas del Resumen:
@@ -1050,114 +996,32 @@ def _ajustar_ancho_operacion(ws) -> None:
         ws.column_dimensions[col].width = ancho
 
 
-_BANCO_DEFECTO = "BCP"
-_MONEDA_ETIQ_RESUMEN = {"SOL": "S/", "USD": "US$"}
-
-
-def _fila_etiqueta(ws, texto: str) -> int | None:
-    """Fila cuya columna A empieza con `texto` (para ubicar bloques del Resumen)."""
-    t = texto.strip().upper()
-    for r in range(1, ws.max_row + 1):
-        v = ws.cell(r, 1).value
-        if isinstance(v, str) and v.strip().upper().startswith(t):
-            return r
-    return None
-
-
-def _rellenar_resumen(wb, rubros_info: list, operaciones: list) -> None:
-    """Reescribe 'I. PAGOS A REALIZAR' con una fila por rubro y moneda, apuntando
-    a los TOTAL del Detalle, y reajusta los totales y el estado de liquidez."""
+def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
     if "Resumen" not in wb.sheetnames:
         return
     ws = wb["Resumen"]
     # Primero se reacomoda la hoja (mover banda + borrar filas), y recién luego
     # se escriben las fórmulas hacia Detalle, ya en su fila definitiva.
     _mover_banda_liquidez(ws)
-
-    f_hdr = _fila_etiqueta(ws, "Banco")
-    f_tot_sol = _fila_etiqueta(ws, "TOTAL SOLES")
-    f_tot_usd = _fila_etiqueta(ws, "TOTAL DÓLARES")
-    if not (f_hdr and f_tot_sol):
-        return
-    f_ini = f_hdr + 1
-
-    # Banco de cada operación, tal como venía en la plantilla (col A).
-    op_moneda = {
-        o["pos"]: ("SOL" if str(o.get("moneda", "")).strip().upper() == "SOL"
-                   else "USD")
-        for o in operaciones
-    }
-    banco_por_pos: dict[int, str] = {}
-    for r in range(f_ini, f_tot_sol):
-        m = _OPERACION_RE.match(str(ws.cell(r, 2).value or ""))
+    op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
+    op_moneda = {o["pos"]: o.get("moneda", "") for o in operaciones}
+    # En 'I. PAGOS A REALIZAR' cada fila tiene la etiqueta 'Operación N' en col B
+    # y una fórmula en col D que apunta al TOTAL de esa operación en Detalle.
+    # Re-rotulamos la etiqueta con el nombre actual (la plantilla puede tenerlo
+    # desactualizado) y re-apuntamos la fórmula a la nueva fila TOTAL. El Neto
+    # está ahora en la columna P del Detalle (antes O, por la columna RUC).
+    for r in range(1, ws.max_row + 1):
+        b = ws.cell(r, 2).value
+        m = _OPERACION_RE.match(str(b)) if b else None
         if m:
-            banco_por_pos[int(m.group(1))] = ws.cell(r, 1).value
+            pos = int(m.group(1))
+            ws.cell(r, 2).value = _titulo_operacion(
+                pos, op_texto.get(pos), op_moneda.get(pos)
+            )
+            if pos in total_rows:
+                ws.cell(r, 4).value = f"=+Detalle!P{total_rows[pos]}"
 
-    def banco_de(info: dict, mon: str) -> str:
-        for pos in info["pos"]:
-            if op_moneda.get(pos) == mon and banco_por_pos.get(pos):
-                return banco_por_pos[pos]
-        return _BANCO_DEFECTO
-
-    # Una fila por rubro y moneda con datos.
-    nuevas = [
-        (info["nombre"], mon, info["fila"], col, banco_de(info, mon))
-        for info in rubros_info
-        for mon, col in (("SOL", _COL_NETO_SOL), ("USD", _COL_NETO_USD))
-        if info["sol" if mon == "SOL" else "usd"]
-    ]
-    if not nuevas:
-        _ajustar_ancho_operacion(ws)
-        return
-
-    # Ajustar cuántas filas hay entre la cabecera y 'TOTAL SOLES'.
-    estilo_fila = [
-        copy(ws.cell(f_ini, c)._style) if ws.cell(f_ini, c).has_style else None
-        for c in range(1, _RESUMEN_NCOLS + 1)
-    ]
-    diff = len(nuevas) - (f_tot_sol - f_ini)
-    if diff:
-        _desplazar_filas(ws, f_tot_sol if diff > 0 else f_tot_sol + diff, diff)
-        f_tot_sol += diff
-        if f_tot_usd:
-            f_tot_usd += diff
-
-    # Escribir las filas (banco, rubro, moneda, importe).
-    ws.cell(f_hdr, 2).value = "Rubro"
-    filas_por_moneda: dict[str, list[int]] = {"SOL": [], "USD": []}
-    bancos_usd: dict[str, list[int]] = {}
-    for i, (nombre, mon, fila_det, col, banco) in enumerate(nuevas):
-        r = f_ini + i
-        for c, estilo in enumerate(estilo_fila, start=1):
-            if estilo is not None:
-                ws.cell(r, c)._style = copy(estilo)
-        ws.cell(r, 1).value = banco
-        ws.cell(r, 2).value = nombre
-        ws.cell(r, 3).value = _MONEDA_ETIQ_RESUMEN[mon]
-        ws.cell(r, 4).value = f"=+Detalle!{get_column_letter(col)}{fila_det}"
-        filas_por_moneda[mon].append(r)
-        if mon == "USD":
-            bancos_usd.setdefault(str(banco or _BANCO_DEFECTO).strip().upper(), []).append(r)
-
-    def suma(filas: list[int]) -> str:
-        return ("=" + "+".join(f"D{r}" for r in filas)) if filas else 0
-
-    ws.cell(f_tot_sol, 4).value = suma(filas_por_moneda["SOL"])
-    if f_tot_usd:
-        ws.cell(f_tot_usd, 4).value = suma(filas_por_moneda["USD"])
-
-    # 'IV. ESTADO DE LIQUIDEZ': pagos por cuenta (col B), según banco y moneda.
-    f_iv = _fila_etiqueta(ws, "IV.")
-    if f_iv:
-        for r in range(f_iv, min(f_iv + 8, ws.max_row + 1)):
-            etiqueta = str(ws.cell(r, 1).value or "").strip().upper()
-            if etiqueta.endswith("SOLES"):
-                ws.cell(r, 2).value = f"=+D{f_tot_sol}"
-            elif etiqueta.endswith("DÓLARES") or etiqueta.endswith("DOLARES"):
-                banco = etiqueta.rsplit(" ", 1)[0].strip()
-                ws.cell(r, 2).value = suma(bancos_usd.get(banco, []))
-
-    # La columna de 'Rubro' se ajusta a las etiquetas ya reescritas.
+    # La columna de 'Operación' se ajusta a las etiquetas ya reescritas.
     _ajustar_ancho_operacion(ws)
 
 
@@ -1421,11 +1285,11 @@ def construir_detalle(
     ref_agentes = _construir_detalle_agentes_sheet(
         wb, grupos_agentes, nombre_por_oc, sharepoint_cfg, ret_cfg
     )
-    rubros_info = _construir_detalle_sheet(
+    total_rows = _construir_detalle_sheet(
         wb, grupos, operaciones, fecha_inicio, fecha_final, sharepoint_cfg,
         grupos_agentes, nombre_por_oc, ruc_por_oc, ref_agentes, ret_cfg,
     )
-    _rellenar_resumen(wb, rubros_info, operaciones)
+    _rellenar_resumen(wb, total_rows, operaciones)
 
     # Sin líneas de cuadrícula en ninguna hoja (se hace al final para cubrir
     # también las que se reconstruyen).
