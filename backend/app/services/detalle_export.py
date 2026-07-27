@@ -434,18 +434,13 @@ def _detectar_por_titulo(ws: Worksheet, regex) -> dict:
     return secciones
 
 
-def _detectar_seguros(ws: Worksheet) -> dict:
-    """data_start_row -> total_row para la sección 'PAGOS SEGUROS'."""
-    return _detectar_por_titulo(ws, _SEGUROS_RE)
-
-
-def _rango_personal(ws: Worksheet) -> tuple[int, int] | None:
-    """(fila de título, fila TOTAL) del bloque 'PAGOS AL PERSONAL', o None."""
-    secciones = _detectar_por_titulo(ws, _PERSONAL_RE)
+def _rango_seccion(ws: Worksheet, regex) -> tuple[int, int, int] | None:
+    """(título, primera fila de datos, TOTAL) de la sección, o None si no está."""
+    secciones = _detectar_por_titulo(ws, regex)
     if not secciones:
         return None
     data_row = next(iter(secciones))
-    return data_row - 2, secciones[data_row]
+    return data_row - 2, data_row, secciones[data_row]
 
 
 # Columna Neto en la hoja 'Detalle de agentes' (para las fórmulas de enlace).
@@ -562,10 +557,10 @@ def _construir_detalle_sheet(
     ncols = 19
     ops = _detectar_operaciones(src)
     agentes = _detectar_agentes(src)
-    seguros = _detectar_seguros(src)
-    # 'PAGOS AL PERSONAL' se saca de su sitio en la plantilla y se emite después
-    # de la última operación (ver `emitir_personal`).
-    personal = _rango_personal(src)
+    # 'PAGOS AL PERSONAL' y 'PAGOS SEGUROS' se sacan de su sitio en la plantilla
+    # y se emiten después de la última operación (ver `emitir_fijas`).
+    personal = _rango_seccion(src, _PERSONAL_RE)
+    seguros = _rango_seccion(src, _SEGUROS_RE)
     ultima_op = max(ops.values(), key=lambda v: v[1])[0] if ops else None
     grupos_agentes = grupos_agentes or {}
     nombre_por_oc = nombre_por_oc or {}
@@ -585,27 +580,48 @@ def _construir_detalle_sheet(
     total_rows: dict = {}   # pos -> fila TOTAL (destino) de esa operación
     total_merges: list = []
 
-    def emitir_personal(dst_r: int) -> int:
-        """Copia el bloque 'PAGOS AL PERSONAL' tal cual (título, cabecera, los
-        bancos y su TOTAL), precedido de una fila en blanco de separación."""
-        if not personal:
-            return dst_r
-        dst_r += 1
-        for rr in range(personal[0], personal[1] + 1):
-            _copiar_fila_desplazada(
-                src, dst, rr, dst_r, ncols, es_cabecera=_es_cabecera(src, rr)
-            )
-            if src.row_dimensions[rr].height:
-                dst.row_dimensions[dst_r].height = src.row_dimensions[rr].height
-            row_map[rr] = dst_r
+    def copiar_fila(src_r: int, dst_r: int) -> int:
+        """Copia una fila de la plantilla conservando alto y merges."""
+        _copiar_fila_desplazada(
+            src, dst, src_r, dst_r, ncols, es_cabecera=_es_cabecera(src, src_r)
+        )
+        if src.row_dimensions[src_r].height:
+            dst.row_dimensions[dst_r].height = src.row_dimensions[src_r].height
+        row_map[src_r] = dst_r
+        return dst_r + 1
+
+    def emitir_fijas(dst_r: int) -> int:
+        """Emite 'PAGOS AL PERSONAL' y 'PAGOS SEGUROS' (en ese orden), cada uno
+        precedido de una fila en blanco de separación."""
+        if personal:
+            dst_r += 1
+            for rr in range(personal[0], personal[2] + 1):
+                dst_r = copiar_fila(rr, dst_r)
+        if seguros:
+            titulo, modelo, total_row = seguros
+            dst_r += 1
+            dst_r = copiar_fila(titulo, dst_r)
+            dst_r = copiar_fila(modelo - 1, dst_r)          # cabecera
+            # Solo las aseguradoras vigentes (la plantilla trae una lista mayor).
+            alto = src.row_dimensions[modelo].height
+            for nombre in _SEGUROS_PROVEEDORES:
+                _copiar_fila_desplazada(src, dst, modelo, dst_r, ncols)
+                dst.cell(dst_r, 1).value = nombre
+                if alto:
+                    dst.row_dimensions[dst_r].height = alto
+                dst_r += 1
+            _copiar_fila_desplazada(src, dst, total_row, dst_r, ncols)
+            if src.row_dimensions[total_row].height:
+                dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
+            total_merges.append(dst_r)
             dst_r += 1
         return dst_r
 
     dst_r = 1
     src_r = 1
     while src_r <= src.max_row:
-        if personal and personal[0] <= src_r <= personal[1]:
-            src_r += 1  # el bloque de personal se emite más abajo
+        if any(s and s[0] <= src_r <= s[2] for s in (personal, seguros)):
+            src_r += 1  # esos bloques se emiten más abajo, tras la última operación
             continue
         if src_r in ops:
             pos, total_row = ops[src_r]
@@ -635,9 +651,9 @@ def _construir_detalle_sheet(
             total_merges.append(dst_r)
             total_rows[pos] = dst_r
             dst_r += 1
-            # Tras la última operación de la plantilla va 'PAGOS AL PERSONAL'.
+            # Tras la última operación van las secciones fijas movidas.
             if pos == ultima_op:
-                dst_r = emitir_personal(dst_r)
+                dst_r = emitir_fijas(dst_r)
             src_r = total_row + 1
         elif src_r in agentes:
             # Sección 'AGENTES DE ADUANAS SOL/DOL': una fila resumen por O/C
@@ -681,25 +697,6 @@ def _construir_detalle_sheet(
                     _ref_agentes(ref_total) if ref_total
                     else f"=SUM(P{data_ini}:P{data_fin})"
                 )
-            total_merges.append(dst_r)
-            dst_r += 1
-            src_r = total_row + 1
-        elif src_r in seguros:
-            # Sección 'PAGOS SEGUROS': se emiten solo las aseguradoras vigentes
-            # (la plantilla trae una lista más larga), con el estilo de la fila
-            # modelo, y luego la fila TOTAL.
-            total_row = seguros[src_r]
-            estilo_row = src_r
-            alto = src.row_dimensions[estilo_row].height
-            for nombre in _SEGUROS_PROVEEDORES:
-                _copiar_fila_desplazada(src, dst, estilo_row, dst_r, ncols)
-                dst.cell(dst_r, 1).value = nombre
-                if alto:
-                    dst.row_dimensions[dst_r].height = alto
-                dst_r += 1
-            _copiar_fila_desplazada(src, dst, total_row, dst_r, ncols)
-            if src.row_dimensions[total_row].height:
-                dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
             total_merges.append(dst_r)
             dst_r += 1
             src_r = total_row + 1
