@@ -1132,7 +1132,15 @@ def _escribir_fila_agente(
     dst.cell(r, 13).border = copy(dst.cell(r, 11).border)         # %RET como %DET
     dst.cell(r, 14).value = f"=ROUND(M{r}*H{r},2)"                 # RET = %RET*IMPORTE (2 dec)
     dst.cell(r, 14).number_format = _DET_FMT
-    dst.cell(r, 15).value = f"=J{r}-L{r}-N{r}"                     # Neto = SALDO-DET-RET
+    # Neto: la misma fórmula del Detalle, pero con las columnas de esta hoja
+    # (aquí no hay PLAZO): DET=L, PAGADO=I, SALDO=J, RET=N.
+    #   si DET>0 y |PAGADO-DET|<1  -> SALDO
+    #   si DET>0 y PAGADO=0        -> SALDO-DET
+    #   en otro caso               -> SALDO   ; luego - RET
+    dst.cell(r, 15).value = (
+        f"=IF(AND(L{r}>0,ABS(I{r}-L{r})<1),J{r},"
+        f"IF(AND(L{r}>0,I{r}=0),J{r}-L{r},J{r}))-N{r}"
+    )
     if agente:
         dst.cell(r, 17).value = agente                            # AGENTE ADUANERO
     # Los datos de relleno no van en negrita (la fila modelo de la plantilla la trae).
