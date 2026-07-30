@@ -26,7 +26,7 @@ from pathlib import Path
 import openpyxl
 from openpyxl.formatting.formatting import ConditionalFormattingList
 from openpyxl.formula.translate import Translator
-from openpyxl.styles import Alignment, Font
+from openpyxl.styles import Alignment, Border, Font, Side
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.worksheet.cell_range import CellRange
 from openpyxl.worksheet.worksheet import Worksheet
@@ -325,6 +325,22 @@ def _copiar_celda(s, d, src_r: int, dst_r: int, src_col: int, dst_col: int) -> N
 def _nc(c: int) -> int:
     """Columna src (plantilla) -> columna dst (salida): inserta RUC en la 2."""
     return c if c == 1 else c + 1
+
+
+# Las secciones fijas de la plantilla traen bordes incompletos (muchas columnas
+# sin ningún lado), y al ir casi vacías se ven como cajas cortadas. A esas
+# secciones se les aplica una cuadrícula fina completa.
+_LADO_FINO = Side(style="thin")
+_BORDE_TABLA = Border(
+    left=_LADO_FINO, right=_LADO_FINO, top=_LADO_FINO, bottom=_LADO_FINO
+)
+
+
+def _aplicar_grid(ws, fila_ini: int, fila_fin: int, ncols: int) -> None:
+    """Bordes finos completos en un bloque de filas (cabecera .. TOTAL)."""
+    for r in range(fila_ini, fila_fin + 1):
+        for c in range(1, ncols + 1):
+            ws.cell(r, c).border = copy(_BORDE_TABLA)
 
 
 def _centrar_horizontal(cell) -> None:
@@ -672,6 +688,7 @@ def _construir_detalle_sheet(
         dst_r = copiar_fila(titulo, dst_r)
         if titulo_texto:
             dst.cell(dst_r - 1, 1).value = titulo_texto
+        fila_cabecera = dst_r
         dst_r = copiar_fila(modelo - 1, dst_r)          # cabecera
         alto = src.row_dimensions[modelo].height
         data_ini = dst_r
@@ -686,6 +703,7 @@ def _construir_detalle_sheet(
             dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
         dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{dst_r - 1})"
         total_merges.append(dst_r)
+        _aplicar_grid(dst, fila_cabecera, dst_r, _COL_LINK)
         return dst_r + 1
 
     def emitir_fijas(dst_r: int) -> int:
@@ -760,6 +778,7 @@ def _construir_detalle_sheet(
                  if mon == moneda),
                 key=lambda x: x[0],
             )
+            fila_cabecera = dst_r - 1   # ya emitida en la rama de copia verbatim
             data_ini = dst_r
             if resumen:
                 alto = src.row_dimensions[estilo_row].height
@@ -793,6 +812,7 @@ def _construir_detalle_sheet(
                     else f"=SUM(P{data_ini}:P{data_fin})"
                 )
             total_merges.append(dst_r)
+            _aplicar_grid(dst, fila_cabecera, dst_r, _COL_LINK)
             dst_r += 1
             src_r = total_row + 1
         else:
