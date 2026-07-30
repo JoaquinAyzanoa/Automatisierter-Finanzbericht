@@ -676,7 +676,7 @@ def _construir_detalle_sheet(
             dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{data_fin})"
             total_merges.append(dst_r)
             total_rows[pos] = dst_r
-            _aplicar_grid(dst, fila_cabecera, dst_r, _COL_LINK)
+            _aplicar_grid(dst, fila_cabecera - 1, dst_r, _COL_LINK)  # -1: banda de titulo
             dst_r += 1
         return dst_r
 
@@ -705,7 +705,7 @@ def _construir_detalle_sheet(
             dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
         dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{dst_r - 1})"
         total_merges.append(dst_r)
-        _aplicar_grid(dst, fila_cabecera, dst_r, _COL_LINK)
+        _aplicar_grid(dst, fila_cabecera - 1, dst_r, _COL_LINK)  # -1: banda de titulo
         return dst_r + 1
 
     def emitir_fijas(dst_r: int) -> int:
@@ -764,7 +764,7 @@ def _construir_detalle_sheet(
             dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{data_fin})"
             total_merges.append(dst_r)
             total_rows[pos] = dst_r
-            _aplicar_grid(dst, fila_cabecera, dst_r, _COL_LINK)
+            _aplicar_grid(dst, fila_cabecera - 1, dst_r, _COL_LINK)  # -1: banda de titulo
             dst_r += 1
             # Tras la última operación de la plantilla van las operaciones extra
             # y, después, las secciones fijas movidas.
@@ -816,7 +816,7 @@ def _construir_detalle_sheet(
                     else f"=SUM(P{data_ini}:P{data_fin})"
                 )
             total_merges.append(dst_r)
-            _aplicar_grid(dst, fila_cabecera, dst_r, _COL_LINK)
+            _aplicar_grid(dst, fila_cabecera - 1, dst_r, _COL_LINK)  # -1: banda de titulo
             dst_r += 1
             src_r = total_row + 1
         else:
