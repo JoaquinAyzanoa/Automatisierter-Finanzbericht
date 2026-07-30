@@ -327,9 +327,9 @@ def _nc(c: int) -> int:
     return c if c == 1 else c + 1
 
 
-# La plantilla trae bordes incompletos en todas las secciones (muchas columnas
-# sin ningún lado), y sin las líneas de cuadrícula de Excel las tablas se ven
-# cortadas. A cada sección se le aplica una cuadrícula fina completa.
+# Las secciones fijas de la plantilla traen bordes incompletos (muchas columnas
+# sin ningún lado), y al ir casi vacías se ven como cajas cortadas. A esas
+# secciones se les aplica una cuadrícula fina completa.
 _LADO_FINO = Side(style="thin")
 _BORDE_TABLA = Border(
     left=_LADO_FINO, right=_LADO_FINO, top=_LADO_FINO, bottom=_LADO_FINO
@@ -651,7 +651,6 @@ def _construir_detalle_sheet(
                 pos, op_texto.get(pos), op_moneda.get(pos)
             )
             dst_r += 1
-            fila_cabecera = dst_r
             _copiar_fila_desplazada(src, dst, m_header, dst_r, ncols, es_cabecera=True)
             dst_r += 1
             data_ini = dst_r
@@ -676,7 +675,6 @@ def _construir_detalle_sheet(
             dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{data_fin})"
             total_merges.append(dst_r)
             total_rows[pos] = dst_r
-            _aplicar_grid(dst, fila_cabecera - 1, dst_r, _COL_LINK)  # -1: banda de titulo
             dst_r += 1
         return dst_r
 
@@ -705,7 +703,7 @@ def _construir_detalle_sheet(
             dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
         dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{dst_r - 1})"
         total_merges.append(dst_r)
-        _aplicar_grid(dst, fila_cabecera - 1, dst_r, _COL_LINK)  # -1: banda de titulo
+        _aplicar_grid(dst, fila_cabecera, dst_r, _COL_LINK)
         return dst_r + 1
 
     def emitir_fijas(dst_r: int) -> int:
@@ -740,7 +738,6 @@ def _construir_detalle_sheet(
             pos, total_row = ops[src_r]
             filas = sorted(grupos.get(pos, []), key=_key_prov)
             estilo_row = src_r  # fila de datos modelo (estilos)
-            fila_cabecera = dst_r - 1   # ya emitida en la rama de copia verbatim
             data_ini = dst_r
             if filas:
                 alto = src.row_dimensions[estilo_row].height
@@ -764,7 +761,6 @@ def _construir_detalle_sheet(
             dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{data_fin})"
             total_merges.append(dst_r)
             total_rows[pos] = dst_r
-            _aplicar_grid(dst, fila_cabecera - 1, dst_r, _COL_LINK)  # -1: banda de titulo
             dst_r += 1
             # Tras la última operación de la plantilla van las operaciones extra
             # y, después, las secciones fijas movidas.
@@ -816,7 +812,7 @@ def _construir_detalle_sheet(
                     else f"=SUM(P{data_ini}:P{data_fin})"
                 )
             total_merges.append(dst_r)
-            _aplicar_grid(dst, fila_cabecera - 1, dst_r, _COL_LINK)  # -1: banda de titulo
+            _aplicar_grid(dst, fila_cabecera, dst_r, _COL_LINK)
             dst_r += 1
             src_r = total_row + 1
         else:
@@ -848,21 +844,6 @@ def _construir_detalle_sheet(
     # Merges de las filas TOTAL de las secciones Operación/Agentes (A:O).
     for tr in total_merges:
         dst.merge_cells(start_row=tr, start_column=1, end_row=tr, end_column=15)
-
-    # Encabezados que la plantilla deja en blanco en algunas secciones (PLAZO,
-    # Neto, N° Registro): se completan con los de la primera operación.
-    if ops:
-        etiquetas = {
-            _nc(c): src.cell(min(ops) - 1, c).value
-            for c in range(1, ncols + 1)
-            if src.cell(min(ops) - 1, c).value not in (None, "")
-        }
-        for r in range(1, dst.max_row + 1):
-            if str(dst.cell(r, 1).value or "").strip().upper() != "PROVEEDOR":
-                continue
-            for c, etiqueta in etiquetas.items():
-                if dst.cell(r, c).value in (None, ""):
-                    dst.cell(r, c).value = etiqueta
 
     # Título con el rango de fechas.
     rango = ""
