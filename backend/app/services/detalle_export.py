@@ -76,6 +76,10 @@ _TXT = {
 }
 _FECHA_COLS = {5, 6, 7}
 
+# Encabezados (columna de la SALIDA -> texto) que la plantilla deja en blanco en
+# las secciones fijas: AGENTES DE ADUANAS, PAGOS AL PERSONAL y PAGOS ANTICIPADOS.
+_ENCABEZADOS_FALTANTES = {11: "PLAZO", 16: "NETO", 19: "N° REGISTRO"}
+
 
 def _num(value) -> float:
     try:
@@ -844,6 +848,14 @@ def _construir_detalle_sheet(
     # Merges de las filas TOTAL de las secciones Operación/Agentes (A:O).
     for tr in total_merges:
         dst.merge_cells(start_row=tr, start_column=1, end_row=tr, end_column=15)
+
+    # Encabezados que la plantilla deja en blanco en algunas secciones.
+    for r in range(1, dst.max_row + 1):
+        if str(dst.cell(r, 1).value or "").strip().upper() != "PROVEEDOR":
+            continue
+        for c, etiqueta in _ENCABEZADOS_FALTANTES.items():
+            if dst.cell(r, c).value in (None, ""):
+                dst.cell(r, c).value = etiqueta
 
     # Título con el rango de fechas.
     rango = ""
