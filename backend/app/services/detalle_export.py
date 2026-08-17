@@ -1141,6 +1141,9 @@ _FILAS_FIJAS_RESUMEN = [
 _BANCO_POR_DEFECTO = "BCP"
 # Operaciones cuyo banco en 'I. PAGOS A REALIZAR' difiere del de la plantilla.
 _BANCO_POR_OPERACION = {6: "BCP", 7: "Interbank"}
+# Operaciones que no son pagos a proveedores y por eso no van al Resumen
+# (la 9 son transferencias entre cuentas propias). Siguen en el Detalle.
+_OPERACIONES_FUERA_RESUMEN = {9}
 # Sección IV (ESTADO DE LIQUIDEZ): cuenta -> qué se paga por ella, con las
 # mismas claves de la sección I (nº de operación o clave de sección fija).
 # 'BCP SOLES' no está: ya apunta al TOTAL SOLES y se actualiza solo.
@@ -1215,7 +1218,7 @@ def _agregar_filas_resumen(
             str(op_moneda.get(pos, "")).upper(),
         )
         for pos in sorted(p for p in total_rows if isinstance(p, int))
-        if pos not in pos_plantilla
+        if pos not in pos_plantilla and pos not in _OPERACIONES_FUERA_RESUMEN
     ]
     nuevas += [d for d in _FILAS_FIJAS_RESUMEN if d[0] in total_rows]
     if not nuevas:
