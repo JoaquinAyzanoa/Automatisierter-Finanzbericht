@@ -592,6 +592,46 @@ def _titulo_operacion(pos, texto, moneda) -> str:
     return " - ".join(partes)
 
 
+# Secciones que no salen de Configuración: título de la plantilla -> nombre con
+# el que se rotulan, ya numeradas junto con las operaciones.
+_NOMBRES_SECCIONES = {
+    "AGENTES DE ADUANAS SOLES": "Agentes de Aduanas - Soles",
+    "AGENTES DE ADUANAS DOLARES": "Agentes de Aduanas - Dólares",
+    "PAGOS AL PERSONAL SOLES": "Pagos al personal - Soles",
+    "PAGOS ANTICIPADOS": "Pagos anticipados",
+}
+
+
+def _clave_titulo(valor) -> str:
+    return " ".join(str(valor or "").split()).upper()
+
+
+def _renumerar_titulos(ws, claves: list) -> dict:
+    """Numera de corrido los títulos del Detalle en el orden en que salen, no
+    por su posición en Configuración: las secciones de agentes y las fijas
+    también entran en la cuenta. Una fila es un título cuando la de abajo es la
+    cabecera 'PROVEEDOR'.
+
+    `claves` son las secciones en ese mismo orden (las de `total_rows`); se
+    devuelve con qué número quedó cada una, para rotular igual el Resumen."""
+    filas = [
+        r
+        for r in range(1, ws.max_row)
+        if _clave_titulo(ws.cell(r + 1, 1).value) == "PROVEEDOR"
+        and str(ws.cell(r, 1).value or "").strip()
+    ]
+    for n, r in enumerate(filas, start=1):
+        titulo = str(ws.cell(r, 1).value).strip()
+        m = _OPERACION_RE.match(titulo)
+        nombre = (
+            titulo[m.end():].lstrip().lstrip("-").strip() if m
+            else _NOMBRES_SECCIONES.get(_clave_titulo(titulo), titulo)
+        )
+        ws.cell(r, 1).value = f"Operación {n} - {nombre}" if nombre else f"Operación {n}"
+    # Si por alguna razón no cuadran, mejor no renumerar el Resumen que rotularlo mal.
+    return dict(zip(claves, range(1, len(filas) + 1))) if len(claves) == len(filas) else {}
+
+
 def _construir_detalle_sheet(
     wb, grupos, operaciones, fecha_inicio, fecha_final, sp_cfg,
     grupos_agentes=None, nombre_por_oc=None, ruc_por_oc=None, ref_agentes=None,
@@ -857,6 +897,9 @@ def _construir_detalle_sheet(
     for tr in total_merges:
         dst.merge_cells(start_row=tr, start_column=1, end_row=tr, end_column=15)
 
+    # Numeración corrida de todas las secciones, en el orden en que salen.
+    numeros = _renumerar_titulos(dst, list(total_rows))
+
     # Encabezados que la plantilla deja en blanco en algunas secciones.
     for r in range(1, dst.max_row + 1):
         if str(dst.cell(r, 1).value or "").strip().upper() != "PROVEEDOR":
@@ -876,7 +919,7 @@ def _construir_detalle_sheet(
     del wb["Detalle"]
     dst.title = "Detalle"
     wb.move_sheet("Detalle", offset=pos_idx - wb.sheetnames.index("Detalle"))
-    return total_rows
+    return total_rows, numeros
 
 
 # Banda 'ESTADO DE LIQUIDEZ' del Resumen (cabecera + valores) que se mueve al
@@ -1156,8 +1199,8 @@ def _eliminar_filas(ws, desde: int, n: int) -> None:
 _FILAS_FIJAS_RESUMEN = [
     ("agentes_SOL", "Agentes de Aduanas - Soles", "SOL"),
     ("agentes_USD", "Agentes de Aduanas - Dólares", "USD"),
-    ("personal", "Pagos al Personal - Soles", "SOL"),
-    ("anticipados", "Pagos Anticipados - Soles", "SOL"),
+    ("personal", "Pagos al personal - Soles", "SOL"),
+    ("anticipados", "Pagos anticipados", "SOL"),
 ]
 _BANCO_POR_DEFECTO = "BCP"
 # Operaciones cuyo banco en 'I. PAGOS A REALIZAR' difiere del de la plantilla.
@@ -1194,7 +1237,7 @@ def _reapuntar_liquidez(ws, filas_resumen: dict) -> None:
     pendientes = dict(_CUENTAS_LIQUIDEZ)
     for r in range(inicio + 1, ws.max_row + 1):
         claves = pendientes.pop(str(ws.cell(r, 1).value or "").strip().upper(), None)
-        filas = [filas_resumen[c] for c in claves or [] if c in filas_resumen]
+        filas = sorted(filas_resumen[c] for c in claves or [] if c in filas_resumen)
         if filas:
             ws.cell(r, 2).value = "=+" + "+".join(f"D{f}" for f in filas)
         if not pendientes:
@@ -1227,14 +1270,54 @@ def _recalcular_totales_moneda(ws, fin: int) -> None:
             ws.cell(r_total, 4).value = "=+" + "+".join(f"D{r}" for r in filas)
 
 
+def _leer_fila_resumen(ws, r: int) -> tuple:
+    return (
+        [ws.cell(r, c).value for c in range(1, _RESUMEN_NCOLS + 1)],
+        [
+            copy(ws.cell(r, c)._style) if ws.cell(r, c).has_style else None
+            for c in range(1, _RESUMEN_NCOLS + 1)
+        ],
+        ws.row_dimensions[r].height,
+    )
+
+
+def _escribir_fila_resumen(ws, r: int, datos: tuple) -> None:
+    valores, estilos, alto = datos
+    for c, (valor, estilo) in enumerate(zip(valores, estilos), start=1):
+        ws.cell(r, c).value = valor
+        if estilo is not None:
+            ws.cell(r, c)._style = copy(estilo)
+    if alto:
+        ws.row_dimensions[r].height = alto
+
+
+def _ordenar_filas_resumen(ws, filas_resumen: dict, numeros: dict) -> dict:
+    """Deja 'I. PAGOS A REALIZAR' en el mismo orden que el Detalle. Las filas
+    que no trae la plantilla se agregan al final del bloque, así que sin esto
+    los agentes quedarían debajo de las operaciones pese a ir antes.
+
+    Se reescriben valores y estilos en su sitio (no se mueven filas): el importe
+    apunta al Detalle, no a otra fila del Resumen, así que no se rompe nada."""
+    if not numeros:
+        return filas_resumen
+    orden = sorted(filas_resumen, key=lambda clave: numeros.get(clave, 10**6))
+    filas = sorted(filas_resumen.values())
+    contenido = [_leer_fila_resumen(ws, filas_resumen[clave]) for clave in orden]
+    for fila, datos in zip(filas, contenido):
+        _escribir_fila_resumen(ws, fila, datos)
+    return dict(zip(orden, filas))
+
+
 def _agregar_filas_resumen(
-    ws, total_rows: dict, operaciones: list, pos_plantilla: set
+    ws, total_rows: dict, operaciones: list, pos_plantilla: set,
+    numeros: dict | None = None,
 ) -> dict:
     """Agrega a 'I. PAGOS A REALIZAR' una fila por cada sección del Detalle que
     la plantilla no trae: operaciones nuevas (una 8ª, 9ª...), agentes de aduana
     y las secciones fijas.
 
     Devuelve la fila del Resumen en que quedó cada clave."""
+    numeros = numeros or {}
     op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
     op_moneda = {o["pos"]: o.get("moneda", "") for o in operaciones}
 
@@ -1243,13 +1326,27 @@ def _agregar_filas_resumen(
     nuevas: list[tuple] = [
         (pos, titulo, str(op_moneda.get(pos, "")).upper())
         for pos, titulo in (
-            (p, _titulo_operacion(p, op_texto.get(p), op_moneda.get(p)))
+            (
+                p,
+                _titulo_operacion(
+                    numeros.get(p, p), op_texto.get(p), op_moneda.get(p)
+                ),
+            )
             for p in sorted(p for p in total_rows if isinstance(p, int))
             if p not in pos_plantilla
         )
         if not _fuera_del_resumen(titulo)
     ]
-    nuevas += [d for d in _FILAS_FIJAS_RESUMEN if d[0] in total_rows]
+    # Las fijas llevan el mismo número que en el Detalle, si se pudo calcular.
+    nuevas += [
+        (
+            clave,
+            f"Operación {numeros[clave]} - {etiqueta}" if clave in numeros else etiqueta,
+            moneda,
+        )
+        for clave, etiqueta, moneda in _FILAS_FIJAS_RESUMEN
+        if clave in total_rows
+    ]
     if not nuevas:
         return {}
     f_tot_sol = _fila_etiqueta(ws, "TOTAL SOLES")
@@ -1298,18 +1395,25 @@ def _fila_etiqueta(ws, texto: str) -> int | None:
     return None
 
 
-def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
+def _rellenar_resumen(
+    wb, total_rows: dict, operaciones: list, numeros: dict | None = None
+) -> None:
     if "Resumen" not in wb.sheetnames:
         return
     ws = wb["Resumen"]
     # Primero se reacomoda la hoja (mover banda + borrar filas), y recién luego
     # se escriben las fórmulas hacia Detalle, ya en su fila definitiva.
     _mover_banda_liquidez(ws)
+    numeros = numeros or {}
     op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
     op_moneda = {o["pos"]: o.get("moneda", "") for o in operaciones}
 
     def etiqueta(pos: int) -> str:
-        return _titulo_operacion(pos, op_texto.get(pos), op_moneda.get(pos))
+        """Con el número que le tocó en el Detalle, para que ambas hojas
+        muestren la misma numeración."""
+        return _titulo_operacion(
+            numeros.get(pos, pos), op_texto.get(pos), op_moneda.get(pos)
+        )
 
     # Si a una fila de la plantilla le toca ahora una operación que no va al
     # Resumen, se borra. De abajo hacia arriba, para no correr las que faltan.
@@ -1340,8 +1444,9 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
     # Las filas nuevas van después de las operaciones, así que las de la
     # plantilla no se mueven y sus números siguen valiendo.
     filas_resumen |= _agregar_filas_resumen(
-        ws, total_rows, operaciones, set(filas_resumen)
+        ws, total_rows, operaciones, set(filas_resumen), numeros
     )
+    filas_resumen = _ordenar_filas_resumen(ws, filas_resumen, numeros)
     f_tot_sol = _fila_etiqueta(ws, _TOTAL_POR_MONEDA["SOL"])
     if f_tot_sol:
         _recalcular_totales_moneda(ws, f_tot_sol)
@@ -1620,11 +1725,11 @@ def construir_detalle(
     ref_agentes = _construir_detalle_agentes_sheet(
         wb, grupos_agentes, nombre_por_oc, sharepoint_cfg, ret_cfg
     )
-    total_rows = _construir_detalle_sheet(
+    total_rows, numeros = _construir_detalle_sheet(
         wb, grupos, operaciones, fecha_inicio, fecha_final, sharepoint_cfg,
         grupos_agentes, nombre_por_oc, ruc_por_oc, ref_agentes, ret_cfg,
     )
-    _rellenar_resumen(wb, total_rows, operaciones)
+    _rellenar_resumen(wb, total_rows, operaciones, numeros)
 
     # Sin líneas de cuadrícula en ninguna hoja (se hace al final para cubrir
     # también las que se reconstruyen).
