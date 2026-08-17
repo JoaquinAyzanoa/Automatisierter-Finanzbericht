@@ -70,37 +70,6 @@
   border-radius: 8px;
 }
 
-.config__mover {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.config__moverBtn {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 17px;
-  padding: 0;
-  color: var(--text-muted);
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-
-.config__moverBtn:hover:not(:disabled) {
-  color: var(--text);
-  border-color: var(--text-muted);
-}
-
-.config__moverBtn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
 .config__label {
   flex-shrink: 0;
   width: 110px;

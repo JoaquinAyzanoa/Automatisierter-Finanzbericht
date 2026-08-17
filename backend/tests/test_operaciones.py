@@ -19,72 +19,95 @@ def _auth_headers(client) -> dict:
     resp = client.post(
         "/api/v1/auth/login", json={"username": "tester", "password": "s3cret"}
     )
-    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+    token = resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
 
 
-def _crear(client, headers, textos: list[str]) -> list[dict]:
-    for texto in textos:
-        client.post(
-            "/api/v1/operaciones",
-            headers=headers,
-            json={"texto": texto, "moneda": "SOL", "ambito": "Nacional"},
-        )
-    return client.get("/api/v1/operaciones", headers=headers).json()
-
-
-def test_posicion_se_asigna_al_crear(client):
+def test_crud_operaciones(client):
     headers = _auth_headers(client)
-    ops = _crear(client, headers, ["A", "B", "C"])
-    assert [o["posicion"] for o in ops] == [1, 2, 3]
-    assert [o["texto"] for o in ops] == ["A", "B", "C"]
 
+    # Vacío al inicio.
+    assert client.get("/api/v1/operaciones", headers=headers).json() == []
 
-def test_reordenar_conserva_los_ids(client):
-    headers = _auth_headers(client)
-    ops = _crear(client, headers, ["A", "B", "C"])
-    ids = {o["texto"]: o["id"] for o in ops}
-
-    # Se manda la lista al revés: cambia la posición, no el id.
-    payload = [
-        {
-            "id": o["id"],
-            "posicion": i,
-            "texto": o["texto"],
-            "moneda": o["moneda"],
-            "ambito": o["ambito"],
-            "tags": o["tags"],
-            "respeta_filtro": o["respeta_filtro"],
-            "aplica_retencion": o["aplica_retencion"],
-        }
-        for i, o in enumerate(reversed(ops), start=1)
-    ]
-    result = client.put("/api/v1/operaciones", headers=headers, json=payload).json()
-
-    assert [o["texto"] for o in result] == ["C", "B", "A"]
-    assert [o["posicion"] for o in result] == [1, 2, 3]
-    assert {o["texto"]: o["id"] for o in result} == ids
-
-
-def test_eliminar_renumera_sin_huecos(client):
-    headers = _auth_headers(client)
-    ops = _crear(client, headers, ["A", "B", "C"])
-
-    client.delete(f"/api/v1/operaciones/{ops[1]['id']}", headers=headers)
-    result = client.get("/api/v1/operaciones", headers=headers).json()
-
-    assert [(o["texto"], o["posicion"]) for o in result] == [("A", 1), ("C", 2)]
-
-
-def test_mover_una_operacion_corre_las_demas(client):
-    headers = _auth_headers(client)
-    ops = _crear(client, headers, ["A", "B", "C"])
-
-    # C pasa a la primera posición; A y B bajan un lugar.
-    client.put(
-        f"/api/v1/operaciones/{ops[2]['id']}", headers=headers, json={"posicion": 1}
+    # Crear.
+    resp = client.post(
+        "/api/v1/operaciones",
+        headers=headers,
+        json={
+            "texto": "Compras locales",
+            "moneda": "USD",
+            "ambito": "Exterior",
+            "tags": ["flete", "aduana"],
+        },
     )
-    result = client.get("/api/v1/operaciones", headers=headers).json()
+    assert resp.status_code == 201
+    op = resp.json()
+    assert op["texto"] == "Compras locales"
+    assert op["moneda"] == "USD"
+    assert op["ambito"] == "Exterior"
+    assert op["tags"] == ["flete", "aduana"]
+    op_id = op["id"]
 
-    assert [(o["texto"], o["posicion"]) for o in result] == [
-        ("C", 1), ("A", 2), ("B", 3)
-    ]
+    # Listar.
+    lista = client.get("/api/v1/operaciones", headers=headers).json()
+    assert len(lista) == 1
+
+    # Actualizar.
+    resp = client.put(
+        f"/api/v1/operaciones/{op_id}",
+        headers=headers,
+        json={"texto": "Compras nacionales", "moneda": "SOL", "ambito": "Nacional"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["texto"] == "Compras nacionales"
+    assert resp.json()["moneda"] == "SOL"
+    assert resp.json()["ambito"] == "Nacional"
+
+    # Eliminar.
+    assert client.delete(f"/api/v1/operaciones/{op_id}", headers=headers).status_code == 204
+    assert client.get("/api/v1/operaciones", headers=headers).json() == []
+
+
+def test_reemplazar_todas(client):
+    headers = _auth_headers(client)
+    client.post(
+        "/api/v1/operaciones",
+        headers=headers,
+        json={"texto": "vieja", "moneda": "SOL"},
+    )
+
+    # Reemplazar toda la lista de una vez (guardado en bloque).
+    resp = client.put(
+        "/api/v1/operaciones",
+        headers=headers,
+        json=[
+            {"texto": "A", "moneda": "SOL", "tags": ["x", "y"]},
+            {"texto": "B", "moneda": "USD"},
+        ],
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [o["texto"] for o in data] == ["A", "B"]
+    assert [o["moneda"] for o in data] == ["SOL", "USD"]
+    assert data[0]["tags"] == ["x", "y"]
+    assert data[1]["tags"] == []
+
+    # Persistió.
+    assert len(client.get("/api/v1/operaciones", headers=headers).json()) == 2
+
+    # Lista vacía borra todo.
+    assert client.put("/api/v1/operaciones", headers=headers, json=[]).json() == []
+
+
+def test_operaciones_requiere_auth(client):
+    assert client.get("/api/v1/operaciones").status_code == 401
+
+
+def test_moneda_invalida_rechazada(client):
+    headers = _auth_headers(client)
+    resp = client.post(
+        "/api/v1/operaciones",
+        headers=headers,
+        json={"texto": "X", "moneda": "EUR"},
+    )
+    assert resp.status_code == 422

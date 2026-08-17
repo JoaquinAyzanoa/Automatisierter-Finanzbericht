@@ -43,16 +43,16 @@ def es_ruc_nacional(ruc) -> bool:
 
 
 def _posicion_objetivo(ruc, moneda, operaciones) -> int | None:
-    """Posición de la primera operación cuyo ámbito y moneda coinciden con la
-    fila. Config-driven: no usa posiciones fijas."""
+    """Posición (1-based) de la primera operación cuyo ámbito y moneda
+    coinciden con la fila. Config-driven: no usa posiciones fijas."""
     row_ambito = _ambito_fila(ruc)
     row_moneda = str(moneda).strip().upper()
-    for op in operaciones:
+    for i, op in enumerate(operaciones):
         if str(op.ambito).strip() != row_ambito:
             continue
         if str(op.moneda).strip().upper() != row_moneda:
             continue
-        return op.posicion
+        return i + 1
     return None
 
 
@@ -78,7 +78,7 @@ def _posicion_por_tags(
     etiquetado se respete 'sí o sí'. Un tag 'tipo:NN' matchea contra la columna
     TIPO (ej. 'tipo:02' = recibos por honorarios); el resto busca el texto en el
     contenido de la fila."""
-    for op in operaciones:
+    for i, op in enumerate(operaciones):
         if str(op.moneda).strip().upper() != row_moneda:
             continue
         for tag in op.tags or []:
@@ -88,9 +88,9 @@ def _posicion_por_tags(
             m = _TIPO_TAG_RE.match(t)
             if m:
                 if _norm_tipo(row_tipo) == _norm_tipo(m.group(1)):
-                    return op.posicion
+                    return i + 1
             elif t.lower() in contenido:
-                return op.posicion
+                return i + 1
     return None
 
 
@@ -132,7 +132,7 @@ def _resolve_fecha_col(df: pd.DataFrame) -> str | None:
 def clasificar_dataframe(
     df: pd.DataFrame, operaciones: list[Operacion]
 ) -> pd.DataFrame:
-    by_pos = {op.posicion: op for op in operaciones}
+    by_pos = {i + 1: op for i, op in enumerate(operaciones)}
     ruc_col = _resolve_col(df, "RUC")
     moneda_col = _resolve_col(df, "MONEDA")
 
@@ -161,8 +161,8 @@ def _fechas_iso(df: pd.DataFrame, fecha_col: str) -> list[str]:
 def clasificar_merge(path: Path, operaciones: list[Operacion]) -> dict:
     """Devuelve el merge clasificado como estructura JSON-serializable.
 
-    Cada fila trae `__pos` = posición de la operación asignada, y se incluye la
-    lista de operaciones para que el frontend arme el desplegable.
+    Cada fila trae `__pos` = posición (1-based) de la operación asignada, y se
+    incluye la lista de operaciones para que el frontend arme el desplegable.
     """
     df = pd.read_excel(path, dtype=str).fillna("")
     df = df.map(_strip_hora)
@@ -173,7 +173,7 @@ def clasificar_merge(path: Path, operaciones: list[Operacion]) -> dict:
     tipo_col = _resolve_col(df, "TIPO")
     fecha_col = _resolve_fecha_col(df)
     iso_list = _fechas_iso(df, fecha_col) if fecha_col else None
-    posiciones = {op.posicion for op in operaciones}
+    n = len(operaciones)
 
     filas = df.to_dict(orient="records")
     for idx, rec in enumerate(filas):
@@ -188,13 +188,13 @@ def clasificar_merge(path: Path, operaciones: list[Operacion]) -> dict:
         if pos is None:
             pos = _posicion_objetivo(ruc, moneda, operaciones)
 
-        rec["__pos"] = pos if pos in posiciones else None
+        rec["__pos"] = pos if (pos and pos <= n) else None
         if iso_list is not None:
             rec["__fec_vcto"] = iso_list[idx]
 
     operaciones_out = [
         {
-            "pos": op.posicion,
+            "pos": i + 1,
             "texto": op.texto,
             "moneda": op.moneda,
             "ambito": op.ambito,
@@ -205,7 +205,7 @@ def clasificar_merge(path: Path, operaciones: list[Operacion]) -> dict:
                 op.aplica_retencion if op.aplica_retencion is not None else True
             ),
         }
-        for op in operaciones
+        for i, op in enumerate(operaciones)
     ]
 
     return {

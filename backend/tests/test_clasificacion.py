@@ -10,18 +10,15 @@ from app.services.excel_utils import write_xlsx
 
 
 def _operaciones() -> list[Operacion]:
-    definicion = [
-        ("Pago masivo proveedores", "SOL", "Nacional"),
-        ("Pago masivo proveedores", "USD", "Nacional"),
-        ("Pagos varios", "SOL", "Nacional"),
-        ("Pagos varios", "USD", "Nacional"),
-        ("Pagos servicios", "SOL", "Nacional"),
-        ("Materia Prima Exterior", "USD", "Exterior"),
+    textos = [
+        "Pago masivo proveedores",  # 1
+        "Pago masivo proveedores",  # 2
+        "Pagos varios",  # 3
+        "Pagos varios",  # 4
+        "Pagos servicios",  # 5
+        "Materia Prima Exterior",  # 6
     ]
-    return [
-        Operacion(posicion=i, texto=texto, moneda=moneda, ambito=ambito)
-        for i, (texto, moneda, ambito) in enumerate(definicion, start=1)
-    ]
+    return [Operacion(texto=t, moneda="SOL", ambito="Nacional") for t in textos]
 
 
 def test_es_ruc_nacional():
@@ -51,8 +48,7 @@ def test_clasificar_dataframe():
     assert list(out["OPERACION"]) == [
         "Operación 1 - Pago masivo proveedores",
         "Operación 2 - Pago masivo proveedores",
-        # Exterior + SOL: ninguna operación combina ese ámbito con esa moneda.
-        "Sin categoría",
+        "Operación 6 - Materia Prima Exterior",
         "Operación 6 - Materia Prima Exterior",
     ]
 
@@ -84,25 +80,23 @@ def test_clasificar_merge_parsea_fec_vcto(tmp_path):
         "moneda": "SOL",
         "ambito": "Nacional",
         "respeta_filtro": True,
-        "aplica_retencion": True,
     }
     assert len(result["operaciones"]) == 6
 
 
 def test_tag_prevalece_respetando_moneda(tmp_path):
     ops = [
-        Operacion(posicion=1, texto="Pago masivo", moneda="SOL", ambito="Nacional", tags=[]),
-        Operacion(posicion=2, texto="Pago masivo", moneda="USD", ambito="Nacional", tags=[]),
+        Operacion(texto="Pago masivo", moneda="SOL", ambito="Nacional", tags=[]),  # 1
+        Operacion(texto="Pago masivo", moneda="USD", ambito="Nacional", tags=[]),  # 2
         Operacion(
-            posicion=3,
             texto="Pagos servicios",
             moneda="SOL",
             ambito="Nacional",
             tags=["transporte"],
-        ),
-        Operacion(posicion=4, texto="X", moneda="SOL", ambito="Nacional", tags=[]),
-        Operacion(posicion=5, texto="Y", moneda="SOL", ambito="Nacional", tags=[]),
-        Operacion(posicion=6, texto="Exterior", moneda="USD", ambito="Exterior", tags=[]),
+        ),  # 3
+        Operacion(texto="X", moneda="SOL", ambito="Nacional", tags=[]),  # 4
+        Operacion(texto="Y", moneda="SOL", ambito="Nacional", tags=[]),  # 5
+        Operacion(texto="Exterior", moneda="USD", ambito="Exterior", tags=[]),  # 6
     ]
     df = pd.DataFrame(
         {

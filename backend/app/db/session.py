@@ -71,25 +71,6 @@ def init_db() -> None:
     _ensure_column(
         "retencion_config", "activo", "BOOLEAN NOT NULL DEFAULT 1"
     )
-    _ensure_column("operaciones", "posicion", "INTEGER NOT NULL DEFAULT 0")
-    _backfill_posiciones()
-
-
-def _backfill_posiciones() -> None:
-    """Numera las operaciones que vienen de antes de existir `posicion`,
-    respetando el orden en que se venían mostrando (por id)."""
-    with engine.begin() as conn:
-        if conn.execute(
-            text("SELECT COUNT(*) FROM operaciones WHERE posicion > 0")
-        ).scalar():
-            return  # ya numeradas
-        conn.execute(
-            text(
-                "UPDATE operaciones SET posicion = ("
-                "  SELECT COUNT(*) FROM operaciones o WHERE o.id <= operaciones.id"
-                ")"
-            )
-        )
 
 
 def get_session() -> Session:

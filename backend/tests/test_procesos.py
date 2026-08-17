@@ -42,15 +42,13 @@ def _crear_merge_avance():
 def test_flujo_proceso(client):
     headers = _auth_headers(client)
 
-    # Operaciones: se crean en orden, así que quedan en las posiciones 1..6.
-    monedas = ["SOL", "USD", "SOL", "USD", "SOL", "USD"]
-    for i, moneda in enumerate(monedas, start=1):
-        resp = client.post(
+    # Operaciones (posiciones 1..6).
+    for i in range(6):
+        client.post(
             "/api/v1/operaciones",
             headers=headers,
-            json={"texto": f"Op {i}", "moneda": moneda, "ambito": "Nacional"},
+            json={"texto": f"Op {i + 1}", "moneda": "SOL", "ambito": "Nacional"},
         )
-        assert resp.json()["posicion"] == i
 
     # Sin merge aún: no se puede crear proceso.
     assert client.post("/api/v1/procesos", headers=headers).status_code == 422

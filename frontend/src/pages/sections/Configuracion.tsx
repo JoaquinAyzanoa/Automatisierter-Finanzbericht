@@ -11,7 +11,6 @@ import {
   reemplazarOperaciones,
   type Ambito,
   type Moneda,
-  type Operacion,
 } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import "./Configuracion.css";
@@ -32,9 +31,7 @@ const MESES: { n: string; nombre: string }[] = [
 ];
 
 interface FilaOp {
-  /** Negativo mientras la operación no se haya guardado nunca. */
   id: number;
-  posicion: number;
   texto: string;
   moneda: Moneda;
   ambito: Ambito;
@@ -42,36 +39,6 @@ interface FilaOp {
   respetaFiltro: boolean;
   aplicaRetencion: boolean;
 }
-
-/** La lista siempre se muestra ordenada por posición, y esta se renumera 1..N. */
-function renumerar(ops: FilaOp[]): FilaOp[] {
-  return ops.map((o, i) => ({ ...o, posicion: i + 1 }));
-}
-
-function desdeApi(o: Operacion): FilaOp {
-  return {
-    id: o.id,
-    posicion: o.posicion,
-    texto: o.texto,
-    moneda: o.moneda,
-    ambito: o.ambito,
-    tags: o.tags ?? [],
-    respetaFiltro: o.respeta_filtro ?? true,
-    aplicaRetencion: o.aplica_retencion ?? true,
-  };
-}
-
-const flechaArriba = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={15} height={15}>
-    <path d="M12 19V5M5 12l7-7 7 7" />
-  </svg>
-);
-
-const flechaAbajo = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={15} height={15}>
-    <path d="M12 5v14M19 12l-7 7-7-7" />
-  </svg>
-);
 
 const trashIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={17} height={17}>
@@ -116,7 +83,19 @@ export function Configuracion() {
     let cancelled = false;
     listarOperaciones(token)
       .then((ops) => {
-        if (!cancelled) setOperaciones(renumerar(ops.map(desdeApi)));
+        if (!cancelled) {
+          setOperaciones(
+            ops.map((o) => ({
+              id: o.id,
+              texto: o.texto,
+              moneda: o.moneda,
+              ambito: o.ambito,
+              tags: o.tags ?? [],
+              respetaFiltro: o.respeta_filtro ?? true,
+              aplicaRetencion: o.aplica_retencion ?? true,
+            }))
+          );
+        }
       })
       .catch(() => {
         if (!cancelled) setError("No se pudieron cargar las operaciones.");
@@ -311,33 +290,18 @@ export function Configuracion() {
   }
 
   function agregar() {
-    setOperaciones((prev) =>
-      renumerar([
-        ...prev,
-        {
-          id: tempId.current--,
-          posicion: prev.length + 1,
-          texto: "",
-          moneda: "SOL",
-          ambito: "Nacional",
-          tags: [],
-          respetaFiltro: true,
-          aplicaRetencion: true,
-        },
-      ])
-    );
-    markDirty();
-  }
-
-  /** Sube (-1) o baja (+1) una operación, intercambiándola con su vecina. */
-  function mover(index: number, delta: number) {
-    setOperaciones((prev) => {
-      const destino = index + delta;
-      if (destino < 0 || destino >= prev.length) return prev;
-      const next = [...prev];
-      [next[index], next[destino]] = [next[destino], next[index]];
-      return renumerar(next);
-    });
+    setOperaciones((prev) => [
+      ...prev,
+      {
+        id: tempId.current--,
+        texto: "",
+        moneda: "SOL",
+        ambito: "Nacional",
+        tags: [],
+        respetaFiltro: true,
+        aplicaRetencion: true,
+      },
+    ]);
     markDirty();
   }
 
@@ -349,7 +313,7 @@ export function Configuracion() {
   }
 
   function eliminar(id: number) {
-    setOperaciones((prev) => renumerar(prev.filter((o) => o.id !== id)));
+    setOperaciones((prev) => prev.filter((o) => o.id !== id));
     markDirty();
   }
 
@@ -380,10 +344,7 @@ export function Configuracion() {
     setSaving(true);
     setError(null);
     try {
-      const items = operaciones.map((o, i) => ({
-        // Los ids negativos son de operaciones que aún no existen en el servidor.
-        id: o.id > 0 ? o.id : undefined,
-        posicion: i + 1,
+      const items = operaciones.map((o) => ({
         texto: o.texto,
         moneda: o.moneda,
         ambito: o.ambito,
@@ -392,7 +353,17 @@ export function Configuracion() {
         aplica_retencion: o.aplicaRetencion,
       }));
       const result = await reemplazarOperaciones(token, items);
-      setOperaciones(renumerar(result.map(desdeApi)));
+      setOperaciones(
+        result.map((o) => ({
+          id: o.id,
+          texto: o.texto,
+          moneda: o.moneda,
+          ambito: o.ambito,
+          tags: o.tags ?? [],
+          respetaFiltro: o.respeta_filtro ?? true,
+          aplicaRetencion: o.aplica_retencion ?? true,
+        }))
+      );
       setDirty(false);
       setSaved(true);
     } catch {
@@ -428,30 +399,7 @@ export function Configuracion() {
           <ul className="config__list">
             {operaciones.map((op, index) => (
               <li key={op.id} className="config__row">
-                <div className="config__mover">
-                  <button
-                    type="button"
-                    className="config__moverBtn"
-                    onClick={() => mover(index, -1)}
-                    disabled={index === 0}
-                    aria-label={`Subir Operación ${op.posicion}`}
-                    title="Subir"
-                  >
-                    {flechaArriba}
-                  </button>
-                  <button
-                    type="button"
-                    className="config__moverBtn"
-                    onClick={() => mover(index, 1)}
-                    disabled={index === operaciones.length - 1}
-                    aria-label={`Bajar Operación ${op.posicion}`}
-                    title="Bajar"
-                  >
-                    {flechaAbajo}
-                  </button>
-                </div>
-
-                <span className="config__label">Operación {op.posicion}</span>
+                <span className="config__label">Operación {index + 1}</span>
 
                 <input
                   type="text"
@@ -487,7 +435,7 @@ export function Configuracion() {
                   type="button"
                   className="config__delete"
                   onClick={() => eliminar(op.id)}
-                  aria-label={`Eliminar Operación ${op.posicion}`}
+                  aria-label={`Eliminar Operación ${index + 1}`}
                 >
                   {trashIcon}
                 </button>
@@ -508,10 +456,10 @@ export function Configuracion() {
           </p>
         ) : (
           <ul className="config__list">
-            {operaciones.map((op) => (
+            {operaciones.map((op, index) => (
               <li key={op.id} className="config__tagRow">
                 <span className="config__tagLabel">
-                  {op.posicion} - {op.texto || "(sin nombre)"} - {op.moneda}
+                  {index + 1} - {op.texto || "(sin nombre)"} - {op.moneda}
                 </span>
                 <select
                   className="config__filtroSelect"
