@@ -1085,9 +1085,10 @@ def _ajustar_refs_por_insercion(formula: str, desde: int, n: int) -> str:
     return _REF_CELDA_RE.sub(_sub, formula)
 
 
-def _insertar_filas(ws, desde: int, n: int) -> None:
-    """Inserta `n` filas en `desde` ajustando fórmulas, celdas combinadas y
-    formato condicional (openpyxl no ajusta nada de eso al insertar)."""
+def _mover_filas(ws, desde: int, n: int, borrar: bool = False) -> None:
+    """Inserta (o borra, si `borrar`) `n` filas en `desde`, ajustando fórmulas,
+    celdas combinadas y formato condicional: openpyxl no ajusta nada de eso, así
+    que hay que rearmarlo a mano."""
     if n <= 0:
         return
     merges = [
@@ -1099,27 +1100,39 @@ def _insertar_filas(ws, desde: int, n: int) -> None:
     cond = [(str(cf.sqref), list(cf.rules)) for cf in ws.conditional_formatting]
     ws.conditional_formatting = ConditionalFormattingList()
 
-    ws.insert_rows(desde, n)
+    if borrar:
+        ws.delete_rows(desde, n)
+    else:
+        ws.insert_rows(desde, n)
 
     # Reapuntar las fórmulas de TODA la hoja: las que referencian filas
-    # desplazadas deben seguirlas, estén donde estén.
+    # desplazadas deben seguirlas, estén donde estén. Al borrar, las que caen
+    # dentro del bloque se dejan como están (quien las use las reescribe).
+    delta = -n if borrar else n
+    corte = desde + n if borrar else desde
     for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
         for cel in row:
             v = cel.value
             if not (isinstance(v, str) and v.startswith("=")):
                 continue
-            nuevo = _ajustar_refs_por_insercion(v, desde, n)
+            nuevo = _ajustar_refs_por_insercion(v, corte, delta)
             if nuevo != v:
                 cel.value = nuevo
 
-    def _nueva(r: int) -> int:
-        return r if r < desde else r + n
-
     for min_r, min_c, max_r, max_c in merges:
-        ws.merge_cells(
-            start_row=_nueva(min_r), start_column=min_c,
-            end_row=_nueva(max_r), end_column=max_c,
-        )
+        if max_r < desde:
+            f1, f2 = min_r, max_r                   # arriba: sin cambio
+        elif min_r >= corte:
+            f1, f2 = min_r + delta, max_r + delta   # abajo: se desplaza
+        elif borrar:
+            continue                                # estaba dentro de lo borrado
+        else:
+            f1, f2 = min_r, max_r + delta           # la inserción lo estira
+        ws.merge_cells(start_row=f1, start_column=min_c, end_row=f2, end_column=max_c)
+
+    def _nueva(r: int) -> int:
+        return r if r < corte else r + delta
+
     for sqref, reglas in cond:
         rangos = [
             f"{get_column_letter(cr.min_col)}{_nueva(cr.min_row)}:"
@@ -1128,6 +1141,14 @@ def _insertar_filas(ws, desde: int, n: int) -> None:
         ]
         for regla in reglas:
             ws.conditional_formatting.add(" ".join(rangos), regla)
+
+
+def _insertar_filas(ws, desde: int, n: int) -> None:
+    _mover_filas(ws, desde, n)
+
+
+def _eliminar_filas(ws, desde: int, n: int) -> None:
+    _mover_filas(ws, desde, n, borrar=True)
 
 
 # Secciones del Detalle que no son operaciones y que la plantilla del Resumen
@@ -1141,9 +1162,17 @@ _FILAS_FIJAS_RESUMEN = [
 _BANCO_POR_DEFECTO = "BCP"
 # Operaciones cuyo banco en 'I. PAGOS A REALIZAR' difiere del de la plantilla.
 _BANCO_POR_OPERACION = {6: "BCP", 7: "Interbank"}
-# Operaciones que no son pagos a proveedores y por eso no van al Resumen
-# (la 9 son transferencias entre cuentas propias). Siguen en el Detalle.
-_OPERACIONES_FUERA_RESUMEN = {9}
+# Operaciones que no son pagos a proveedores y por eso no van al Resumen (las
+# transferencias entre cuentas propias). Siguen apareciendo en el Detalle. Se
+# reconocen por su nombre y no por su número, porque el orden de las operaciones
+# se puede cambiar desde Configuración.
+_OPERACIONES_FUERA_RESUMEN = {"TRANSFERENCIAS ENTRE CUENTAS - SOLES"}
+
+
+def _fuera_del_resumen(titulo: str) -> bool:
+    """`titulo` es la etiqueta completa ('Operación N - Texto - Moneda')."""
+    t = " ".join(str(titulo or "").split()).upper()
+    return any(t.endswith(nombre) for nombre in _OPERACIONES_FUERA_RESUMEN)
 # Sección IV (ESTADO DE LIQUIDEZ): cuenta -> qué se paga por ella, con las
 # mismas claves de la sección I (nº de operación o clave de sección fija).
 # 'BCP SOLES' no está: ya apunta al TOTAL SOLES y se actualiza solo.
@@ -1212,13 +1241,13 @@ def _agregar_filas_resumen(
     # (clave en total_rows, etiqueta, moneda): primero las operaciones que
     # faltan, en orden, y después las secciones fijas.
     nuevas: list[tuple] = [
-        (
-            pos,
-            _titulo_operacion(pos, op_texto.get(pos), op_moneda.get(pos)),
-            str(op_moneda.get(pos, "")).upper(),
+        (pos, titulo, str(op_moneda.get(pos, "")).upper())
+        for pos, titulo in (
+            (p, _titulo_operacion(p, op_texto.get(p), op_moneda.get(p)))
+            for p in sorted(p for p in total_rows if isinstance(p, int))
+            if p not in pos_plantilla
         )
-        for pos in sorted(p for p in total_rows if isinstance(p, int))
-        if pos not in pos_plantilla and pos not in _OPERACIONES_FUERA_RESUMEN
+        if not _fuera_del_resumen(titulo)
     ]
     nuevas += [d for d in _FILAS_FIJAS_RESUMEN if d[0] in total_rows]
     if not nuevas:
@@ -1278,6 +1307,18 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
     _mover_banda_liquidez(ws)
     op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
     op_moneda = {o["pos"]: o.get("moneda", "") for o in operaciones}
+
+    def etiqueta(pos: int) -> str:
+        return _titulo_operacion(pos, op_texto.get(pos), op_moneda.get(pos))
+
+    # Si a una fila de la plantilla le toca ahora una operación que no va al
+    # Resumen, se borra. De abajo hacia arriba, para no correr las que faltan.
+    for r in range(ws.max_row, 0, -1):
+        b = ws.cell(r, 2).value
+        m = _OPERACION_RE.match(str(b)) if b else None
+        if m and _fuera_del_resumen(etiqueta(int(m.group(1)))):
+            _eliminar_filas(ws, r, 1)
+
     # En 'I. PAGOS A REALIZAR' cada fila tiene la etiqueta 'Operación N' en col B
     # y una fórmula en col D que apunta al TOTAL de esa operación en Detalle.
     # Re-rotulamos la etiqueta con el nombre actual (la plantilla puede tenerlo
@@ -1290,9 +1331,7 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
         if m:
             pos = int(m.group(1))
             filas_resumen[pos] = r
-            ws.cell(r, 2).value = _titulo_operacion(
-                pos, op_texto.get(pos), op_moneda.get(pos)
-            )
+            ws.cell(r, 2).value = etiqueta(pos)
             if pos in _BANCO_POR_OPERACION:
                 ws.cell(r, 1).value = _BANCO_POR_OPERACION[pos]
             if pos in total_rows:
