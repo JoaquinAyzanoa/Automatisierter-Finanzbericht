@@ -1139,6 +1139,8 @@ _FILAS_FIJAS_RESUMEN = [
     ("anticipados", "Pagos Anticipados - Soles", "SOL"),
 ]
 _BANCO_POR_DEFECTO = "BCP"
+# Operaciones cuyo banco en 'I. PAGOS A REALIZAR' difiere del de la plantilla.
+_BANCO_POR_OPERACION = {6: "BCP", 7: "Interbank"}
 _SIMBOLO_MONEDA = {"SOL": "S/", "USD": "US$"}
 _TOTAL_POR_MONEDA = {"SOL": "TOTAL SOLES", "USD": "TOTAL DÓLARES"}
 
@@ -1244,6 +1246,8 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
             ws.cell(r, 2).value = _titulo_operacion(
                 pos, op_texto.get(pos), op_moneda.get(pos)
             )
+            if pos in _BANCO_POR_OPERACION:
+                ws.cell(r, 1).value = _BANCO_POR_OPERACION[pos]
             if pos in total_rows:
                 ws.cell(r, 4).value = f"=+Detalle!P{total_rows[pos]}"
 
