@@ -26,17 +26,28 @@ class OperacionService:
             tags=data.tags,
             respeta_filtro=data.respeta_filtro,
             aplica_retencion=data.aplica_retencion,
+            posicion=data.posicion,
         )
 
     def replace_all(self, items: list[OperacionCreate]) -> list[Operacion]:
-        pairs = [
-            (
-                item.texto, item.moneda, item.ambito, item.tags,
-                item.respeta_filtro, item.aplica_retencion,
-            )
-            for item in items
-        ]
-        return self.repo.replace_all(pairs)
+        """El orden de la lista manda: si vienen con `posicion`, se ordenan por
+        ella; si no, quedan en el orden en que llegaron."""
+        if all(item.posicion for item in items):
+            items = sorted(items, key=lambda item: item.posicion or 0)
+        return self.repo.replace_all(
+            [
+                {
+                    "id": item.id,
+                    "texto": item.texto,
+                    "moneda": item.moneda,
+                    "ambito": item.ambito,
+                    "tags": item.tags,
+                    "respeta_filtro": item.respeta_filtro,
+                    "aplica_retencion": item.aplica_retencion,
+                }
+                for item in items
+            ]
+        )
 
     def update(self, operacion_id: int, data: OperacionUpdate) -> Operacion:
         operacion = self.repo.get(operacion_id)
@@ -50,6 +61,7 @@ class OperacionService:
             tags=data.tags,
             respeta_filtro=data.respeta_filtro,
             aplica_retencion=data.aplica_retencion,
+            posicion=data.posicion,
         )
 
     def delete(self, operacion_id: int) -> None:

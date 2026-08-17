@@ -144,6 +144,8 @@ export type Ambito = "Nacional" | "Exterior";
 
 export interface Operacion {
   id: number;
+  /** Orden de la operación (1..N). Es el número de «Operación N». */
+  posicion: number;
   texto: string;
   moneda: Moneda;
   ambito: Ambito;
@@ -216,6 +218,9 @@ export async function eliminarOperacion(
 export async function reemplazarOperaciones(
   token: string,
   items: {
+    /** Las que ya existen mandan su id para conservarlo al reordenar. */
+    id?: number;
+    posicion: number;
     texto: string;
     moneda: Moneda;
     ambito: Ambito;

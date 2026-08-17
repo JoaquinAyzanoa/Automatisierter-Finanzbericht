@@ -142,10 +142,10 @@ class ProcesoService:
         sharepoint_cfg = SharepointConfigService(self.db).as_dict()
         agente_svc = AgenteConfigService(self.db)
         # Operaciones sin retención según la config ACTUAL (no el snapshot del
-        # proceso), para que el toggle aplique sin reprocesar. Posición = orden.
+        # proceso), para que el toggle aplique sin reprocesar.
         pos_sin_ret = {
-            i + 1
-            for i, op in enumerate(OperacionRepository(self.db).list())
+            op.posicion
+            for op in OperacionRepository(self.db).list()
             if not op.aplica_retencion
         }
         return detalle_export.construir_detalle(

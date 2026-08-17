@@ -8,6 +8,10 @@ Ambito = Literal["Nacional", "Exterior"]
 
 
 class OperacionCreate(BaseModel):
+    # Al guardar la lista completa, `id` identifica a las operaciones que ya
+    # existen para que conserven el suyo al reordenarlas. Vacío = una nueva.
+    id: int | None = None
+    posicion: int | None = Field(default=None, ge=1)
     texto: str = Field(default="", max_length=255)
     moneda: Moneda = "SOL"
     ambito: Ambito = "Nacional"
@@ -17,6 +21,7 @@ class OperacionCreate(BaseModel):
 
 
 class OperacionUpdate(BaseModel):
+    posicion: int | None = Field(default=None, ge=1)
     texto: str | None = Field(default=None, max_length=255)
     moneda: Moneda | None = None
     ambito: Ambito | None = None
@@ -29,6 +34,7 @@ class OperacionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    posicion: int
     texto: str
     moneda: Moneda
     ambito: Ambito
