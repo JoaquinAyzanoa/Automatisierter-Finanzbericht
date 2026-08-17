@@ -1167,20 +1167,32 @@ def _reapuntar_liquidez(ws, filas_resumen: dict) -> None:
             ws.cell(r, 2).value = "=+" + "+".join(f"D{f}" for f in filas)
         if not pendientes:
             return
+
+
 _SIMBOLO_MONEDA = {"SOL": "S/", "USD": "US$"}
 _TOTAL_POR_MONEDA = {"SOL": "TOTAL SOLES", "USD": "TOTAL DÓLARES"}
 
 
-def _modelos_por_moneda(ws, fin: int) -> dict[str, int]:
-    """Última fila de 'I. PAGOS A REALIZAR' (antes de `fin`) de cada moneda, para
-    usarla como modelo de estilo. Se reconoce por el símbolo de la columna C."""
+def _filas_por_moneda(ws, fin: int) -> dict[str, list[int]]:
+    """Filas de 'I. PAGOS A REALIZAR' (antes de `fin`) agrupadas por moneda,
+    reconocida por el símbolo de la columna C."""
     por_simbolo = {v: k for k, v in _SIMBOLO_MONEDA.items()}
-    modelos: dict[str, int] = {}
+    filas: dict[str, list[int]] = {}
     for r in range(1, fin):
         moneda = por_simbolo.get(str(ws.cell(r, 3).value or "").strip())
         if moneda and ws.cell(r, 2).value:
-            modelos[moneda] = r
-    return modelos
+            filas.setdefault(moneda, []).append(r)
+    return filas
+
+
+def _recalcular_totales_moneda(ws, fin: int) -> None:
+    """TOTAL SOLES y TOTAL DÓLARES = suma de todas las filas de su moneda. La
+    plantilla las enumeraba a mano y se saltaba alguna operación."""
+    for moneda, filas in _filas_por_moneda(ws, fin).items():
+        etiqueta = _TOTAL_POR_MONEDA.get(moneda)
+        r_total = _fila_etiqueta(ws, etiqueta) if etiqueta else None
+        if r_total:
+            ws.cell(r_total, 4).value = "=+" + "+".join(f"D{r}" for r in filas)
 
 
 def _agregar_filas_resumen(
@@ -1188,8 +1200,7 @@ def _agregar_filas_resumen(
 ) -> dict:
     """Agrega a 'I. PAGOS A REALIZAR' una fila por cada sección del Detalle que
     la plantilla no trae: operaciones nuevas (una 8ª, 9ª...), agentes de aduana
-    y las secciones fijas. Cada una se suma al TOTAL de su moneda SIN reescribir
-    la fórmula existente: se le anexan las referencias nuevas al final.
+    y las secciones fijas.
 
     Devuelve la fila del Resumen en que quedó cada clave."""
     op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
@@ -1216,7 +1227,7 @@ def _agregar_filas_resumen(
     # Las filas van justo antes de 'TOTAL SOLES'. Cada una copia el estilo de
     # una fila de su misma moneda: el formato de número del importe lleva el
     # símbolo (S/ o US$), así que un modelo único mostraría todo en dólares.
-    modelos = _modelos_por_moneda(ws, f_tot_sol)
+    modelos = {mon: fs[-1] for mon, fs in _filas_por_moneda(ws, f_tot_sol).items()}
     estilos = {
         mon: [
             copy(ws.cell(fila, c)._style) if ws.cell(fila, c).has_style else None
@@ -1227,7 +1238,6 @@ def _agregar_filas_resumen(
     altos = {mon: ws.row_dimensions[fila].height for mon, fila in modelos.items()}
     _insertar_filas(ws, f_tot_sol, len(nuevas))
 
-    agregadas: dict[str, list[int]] = {}
     filas_por_clave: dict = {}
     for i, (clave, etiqueta, moneda) in enumerate(nuevas):
         r = f_tot_sol + i
@@ -1242,21 +1252,7 @@ def _agregar_filas_resumen(
         ws.cell(r, 2).value = etiqueta
         ws.cell(r, 3).value = _SIMBOLO_MONEDA.get(moneda, "")
         ws.cell(r, 4).value = f"=+Detalle!P{total_rows[clave]}"
-        fila_total = _TOTAL_POR_MONEDA.get(moneda)
-        if fila_total:
-            agregadas.setdefault(fila_total, []).append(r)
 
-    # Anexar las nuevas filas al TOTAL de su moneda, conservando la fórmula.
-    for etiqueta_total, filas in agregadas.items():
-        r_total = _fila_etiqueta(ws, etiqueta_total)
-        if not r_total:
-            continue
-        actual = ws.cell(r_total, 4).value
-        extra = "+".join(f"D{r}" for r in filas)
-        ws.cell(r_total, 4).value = (
-            f"{actual}+{extra}" if isinstance(actual, str) and actual.startswith("=")
-            else f"={extra}"
-        )
     return filas_por_clave
 
 
@@ -1304,6 +1300,9 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
     filas_resumen |= _agregar_filas_resumen(
         ws, total_rows, operaciones, set(filas_resumen)
     )
+    f_tot_sol = _fila_etiqueta(ws, _TOTAL_POR_MONEDA["SOL"])
+    if f_tot_sol:
+        _recalcular_totales_moneda(ws, f_tot_sol)
     _reapuntar_liquidez(ws, filas_resumen)
 
     # La columna de 'Operación' se ajusta a las etiquetas ya reescritas.
