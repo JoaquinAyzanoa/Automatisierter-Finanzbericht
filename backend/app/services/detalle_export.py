@@ -682,7 +682,8 @@ def _construir_detalle_sheet(
             dst_r += 1
         return dst_r
 
-    def emitir_seccion_fija(sec, nombres, dst_r: int, titulo_texto=None) -> int:
+    def emitir_seccion_fija(sec, nombres, dst_r: int, clave: str,
+                            titulo_texto=None) -> int:
         """Título, cabecera, una fila por nombre (con el estilo de la fila modelo)
         y TOTAL. La lista sale de las constantes, no de la plantilla, así que el
         TOTAL se recalcula sobre las filas realmente emitidas. Sin entradas, se
@@ -707,16 +708,21 @@ def _construir_detalle_sheet(
             dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
         dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{dst_r - 1})"
         total_merges.append(dst_r)
+        # Fila TOTAL de la sección, para referenciarla desde el Resumen.
+        total_rows[clave] = dst_r
         _aplicar_grid(dst, fila_cabecera, dst_r, _COL_LINK)
         return dst_r + 1
 
     def emitir_fijas(dst_r: int) -> int:
         """Emite 'PAGOS AL PERSONAL' y 'PAGOS ANTICIPADOS' (en ese orden)."""
         if personal:
-            dst_r = emitir_seccion_fija(personal, _PERSONAL_PROVEEDORES, dst_r)
+            dst_r = emitir_seccion_fija(
+                personal, _PERSONAL_PROVEEDORES, dst_r, "personal"
+            )
         if seguros:
             dst_r = emitir_seccion_fija(
-                seguros, _ANTICIPADOS_PROVEEDORES, dst_r, _ANTICIPADOS_TITULO
+                seguros, _ANTICIPADOS_PROVEEDORES, dst_r, "anticipados",
+                _ANTICIPADOS_TITULO,
             )
         return dst_r
 
@@ -1124,19 +1130,41 @@ def _insertar_filas(ws, desde: int, n: int) -> None:
             ws.conditional_formatting.add(" ".join(rangos), regla)
 
 
-# Filas que se agregan a 'I. PAGOS A REALIZAR' por las secciones de agentes:
-# (clave en total_rows, banco, etiqueta, moneda, fila del TOTAL de esa moneda).
-_FILAS_AGENTES_RESUMEN = [
-    ("agentes_SOL", "BCP", "Agentes de Aduanas - Soles", "S/", "TOTAL SOLES"),
-    ("agentes_USD", "BCP", "Agentes de Aduanas - Dólares", "US$", "TOTAL DÓLARES"),
+# Secciones del Detalle que no son operaciones y que la plantilla del Resumen
+# no contempla: (clave en total_rows, etiqueta, moneda).
+_FILAS_FIJAS_RESUMEN = [
+    ("agentes_SOL", "Agentes de Aduanas - Soles", "SOL"),
+    ("agentes_USD", "Agentes de Aduanas - Dólares", "USD"),
+    ("personal", "Pagos al Personal - Soles", "SOL"),
+    ("anticipados", "Pagos Anticipados - Soles", "SOL"),
 ]
+_BANCO_POR_DEFECTO = "BCP"
+_SIMBOLO_MONEDA = {"SOL": "S/", "USD": "US$"}
+_TOTAL_POR_MONEDA = {"SOL": "TOTAL SOLES", "USD": "TOTAL DÓLARES"}
 
 
-def _agregar_filas_agentes(ws, total_rows: dict) -> None:
-    """Agrega al Resumen una fila por cada sección de agentes de aduana, y las
-    suma al TOTAL de su moneda SIN reescribir la fórmula existente (se le anexan
-    las referencias nuevas)."""
-    nuevas = [d for d in _FILAS_AGENTES_RESUMEN if d[0] in total_rows]
+def _agregar_filas_resumen(
+    ws, total_rows: dict, operaciones: list, pos_plantilla: set
+) -> None:
+    """Agrega a 'I. PAGOS A REALIZAR' una fila por cada sección del Detalle que
+    la plantilla no trae: operaciones nuevas (una 8ª, 9ª...), agentes de aduana
+    y las secciones fijas. Cada una se suma al TOTAL de su moneda SIN reescribir
+    la fórmula existente: se le anexan las referencias nuevas al final."""
+    op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
+    op_moneda = {o["pos"]: o.get("moneda", "") for o in operaciones}
+
+    # (clave en total_rows, etiqueta, moneda): primero las operaciones que
+    # faltan, en orden, y después las secciones fijas.
+    nuevas: list[tuple] = [
+        (
+            pos,
+            _titulo_operacion(pos, op_texto.get(pos), op_moneda.get(pos)),
+            str(op_moneda.get(pos, "")).upper(),
+        )
+        for pos in sorted(p for p in total_rows if isinstance(p, int))
+        if pos not in pos_plantilla
+    ]
+    nuevas += [d for d in _FILAS_FIJAS_RESUMEN if d[0] in total_rows]
     if not nuevas:
         return
     f_tot_sol = _fila_etiqueta(ws, "TOTAL SOLES")
@@ -1154,18 +1182,20 @@ def _agregar_filas_agentes(ws, total_rows: dict) -> None:
     _insertar_filas(ws, f_tot_sol, len(nuevas))
 
     agregadas: dict[str, list[int]] = {}
-    for i, (clave, banco, etiqueta, moneda, fila_total) in enumerate(nuevas):
+    for i, (clave, etiqueta, moneda) in enumerate(nuevas):
         r = f_tot_sol + i
         for c, estilo in enumerate(estilos, start=1):
             if estilo is not None:
                 ws.cell(r, c)._style = copy(estilo)
         if alto:
             ws.row_dimensions[r].height = alto
-        ws.cell(r, 1).value = banco
+        ws.cell(r, 1).value = _BANCO_POR_DEFECTO
         ws.cell(r, 2).value = etiqueta
-        ws.cell(r, 3).value = moneda
+        ws.cell(r, 3).value = _SIMBOLO_MONEDA.get(moneda, "")
         ws.cell(r, 4).value = f"=+Detalle!P{total_rows[clave]}"
-        agregadas.setdefault(fila_total, []).append(r)
+        fila_total = _TOTAL_POR_MONEDA.get(moneda)
+        if fila_total:
+            agregadas.setdefault(fila_total, []).append(r)
 
     # Anexar las nuevas filas al TOTAL de su moneda, conservando la fórmula.
     for etiqueta_total, filas in agregadas.items():
@@ -1204,18 +1234,20 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
     # Re-rotulamos la etiqueta con el nombre actual (la plantilla puede tenerlo
     # desactualizado) y re-apuntamos la fórmula a la nueva fila TOTAL. El Neto
     # está ahora en la columna P del Detalle (antes O, por la columna RUC).
+    pos_plantilla: set[int] = set()
     for r in range(1, ws.max_row + 1):
         b = ws.cell(r, 2).value
         m = _OPERACION_RE.match(str(b)) if b else None
         if m:
             pos = int(m.group(1))
+            pos_plantilla.add(pos)
             ws.cell(r, 2).value = _titulo_operacion(
                 pos, op_texto.get(pos), op_moneda.get(pos)
             )
             if pos in total_rows:
                 ws.cell(r, 4).value = f"=+Detalle!P{total_rows[pos]}"
 
-    _agregar_filas_agentes(ws, total_rows)
+    _agregar_filas_resumen(ws, total_rows, operaciones, pos_plantilla)
 
     # La columna de 'Operación' se ajusta a las etiquetas ya reescritas.
     _ajustar_ancho_operacion(ws)
