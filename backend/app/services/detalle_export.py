@@ -816,6 +816,8 @@ def _construir_detalle_sheet(
                     else f"=SUM(P{data_ini}:P{data_fin})"
                 )
             total_merges.append(dst_r)
+            # Fila TOTAL de la sección, para referenciarla desde el Resumen.
+            total_rows[f"agentes_{moneda}"] = dst_r
             _aplicar_grid(dst, fila_cabecera, dst_r, _COL_LINK)
             dst_r += 1
             src_r = total_row + 1
@@ -1052,6 +1054,142 @@ def _ajustar_ancho_operacion(ws) -> None:
         ws.column_dimensions[col].width = ancho
 
 
+# Referencia de celda en una fórmula, con su hoja opcional ('Detalle'!P8, D6, $D$6).
+_REF_CELDA_RE = re.compile(
+    r"(?P<hoja>'[^']+'!|[A-Za-z_][A-Za-z0-9_.]*!)?"
+    r"(?P<col>\$?[A-Z]{1,3})(?P<fila>\$?\d+)"
+)
+
+
+def _ajustar_refs_por_insercion(formula: str, desde: int, n: int) -> str:
+    """Desplaza `n` filas solo las referencias a filas >= `desde`, como hace
+    Excel al insertar: lo de más arriba no se mueve. Las referencias a otra hoja
+    se dejan intactas (esas filas no cambiaron)."""
+
+    def _sub(m: re.Match) -> str:
+        if m.group("hoja"):
+            return m.group(0)
+        fila_txt = m.group("fila")
+        abs_fila = fila_txt.startswith("$")
+        fila = int(fila_txt.lstrip("$"))
+        if fila < desde:
+            return m.group(0)
+        return f"{m.group('col')}{'$' if abs_fila else ''}{fila + n}"
+
+    return _REF_CELDA_RE.sub(_sub, formula)
+
+
+def _insertar_filas(ws, desde: int, n: int) -> None:
+    """Inserta `n` filas en `desde` ajustando fórmulas, celdas combinadas y
+    formato condicional (openpyxl no ajusta nada de eso al insertar)."""
+    if n <= 0:
+        return
+    merges = [
+        (m.min_row, m.min_col, m.max_row, m.max_col)
+        for m in list(ws.merged_cells.ranges)
+    ]
+    for m in list(ws.merged_cells.ranges):
+        ws.unmerge_cells(str(m))
+    cond = [(str(cf.sqref), list(cf.rules)) for cf in ws.conditional_formatting]
+    ws.conditional_formatting = ConditionalFormattingList()
+
+    ws.insert_rows(desde, n)
+
+    # Reapuntar las fórmulas de TODA la hoja: las que referencian filas
+    # desplazadas deben seguirlas, estén donde estén.
+    for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
+        for cel in row:
+            v = cel.value
+            if not (isinstance(v, str) and v.startswith("=")):
+                continue
+            nuevo = _ajustar_refs_por_insercion(v, desde, n)
+            if nuevo != v:
+                cel.value = nuevo
+
+    def _nueva(r: int) -> int:
+        return r if r < desde else r + n
+
+    for min_r, min_c, max_r, max_c in merges:
+        ws.merge_cells(
+            start_row=_nueva(min_r), start_column=min_c,
+            end_row=_nueva(max_r), end_column=max_c,
+        )
+    for sqref, reglas in cond:
+        rangos = [
+            f"{get_column_letter(cr.min_col)}{_nueva(cr.min_row)}:"
+            f"{get_column_letter(cr.max_col)}{_nueva(cr.max_row)}"
+            for cr in (CellRange(p) for p in str(sqref).split())
+        ]
+        for regla in reglas:
+            ws.conditional_formatting.add(" ".join(rangos), regla)
+
+
+# Filas que se agregan a 'I. PAGOS A REALIZAR' por las secciones de agentes:
+# (clave en total_rows, banco, etiqueta, moneda, fila del TOTAL de esa moneda).
+_FILAS_AGENTES_RESUMEN = [
+    ("agentes_SOL", "BCP", "Agentes de Aduanas - Soles", "S/", "TOTAL SOLES"),
+    ("agentes_USD", "BCP", "Agentes de Aduanas - Dólares", "US$", "TOTAL DÓLARES"),
+]
+
+
+def _agregar_filas_agentes(ws, total_rows: dict) -> None:
+    """Agrega al Resumen una fila por cada sección de agentes de aduana, y las
+    suma al TOTAL de su moneda SIN reescribir la fórmula existente (se le anexan
+    las referencias nuevas)."""
+    nuevas = [d for d in _FILAS_AGENTES_RESUMEN if d[0] in total_rows]
+    if not nuevas:
+        return
+    f_tot_sol = _fila_etiqueta(ws, "TOTAL SOLES")
+    if not f_tot_sol:
+        return
+
+    # Las filas van justo antes de 'TOTAL SOLES'; la última operación es el
+    # modelo de estilo.
+    modelo = f_tot_sol - 1
+    estilos = [
+        copy(ws.cell(modelo, c)._style) if ws.cell(modelo, c).has_style else None
+        for c in range(1, _RESUMEN_NCOLS + 1)
+    ]
+    alto = ws.row_dimensions[modelo].height
+    _insertar_filas(ws, f_tot_sol, len(nuevas))
+
+    agregadas: dict[str, list[int]] = {}
+    for i, (clave, banco, etiqueta, moneda, fila_total) in enumerate(nuevas):
+        r = f_tot_sol + i
+        for c, estilo in enumerate(estilos, start=1):
+            if estilo is not None:
+                ws.cell(r, c)._style = copy(estilo)
+        if alto:
+            ws.row_dimensions[r].height = alto
+        ws.cell(r, 1).value = banco
+        ws.cell(r, 2).value = etiqueta
+        ws.cell(r, 3).value = moneda
+        ws.cell(r, 4).value = f"=+Detalle!P{total_rows[clave]}"
+        agregadas.setdefault(fila_total, []).append(r)
+
+    # Anexar las nuevas filas al TOTAL de su moneda, conservando la fórmula.
+    for etiqueta_total, filas in agregadas.items():
+        r_total = _fila_etiqueta(ws, etiqueta_total)
+        if not r_total:
+            continue
+        actual = ws.cell(r_total, 4).value
+        extra = "+".join(f"D{r}" for r in filas)
+        ws.cell(r_total, 4).value = (
+            f"{actual}+{extra}" if isinstance(actual, str) and actual.startswith("=")
+            else f"={extra}"
+        )
+
+
+def _fila_etiqueta(ws, texto: str) -> int | None:
+    """Fila cuya columna A empieza con `texto`."""
+    t = texto.strip().upper()
+    for r in range(1, ws.max_row + 1):
+        v = ws.cell(r, 1).value
+        if isinstance(v, str) and v.strip().upper().startswith(t):
+            return r
+    return None
+
+
 def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
     if "Resumen" not in wb.sheetnames:
         return
@@ -1076,6 +1214,8 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
             )
             if pos in total_rows:
                 ws.cell(r, 4).value = f"=+Detalle!P{total_rows[pos]}"
+
+    _agregar_filas_agentes(ws, total_rows)
 
     # La columna de 'Operación' se ajusta a las etiquetas ya reescritas.
     _ajustar_ancho_operacion(ws)
