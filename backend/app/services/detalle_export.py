@@ -1145,6 +1145,18 @@ _SIMBOLO_MONEDA = {"SOL": "S/", "USD": "US$"}
 _TOTAL_POR_MONEDA = {"SOL": "TOTAL SOLES", "USD": "TOTAL DÓLARES"}
 
 
+def _modelos_por_moneda(ws, fin: int) -> dict[str, int]:
+    """Última fila de 'I. PAGOS A REALIZAR' (antes de `fin`) de cada moneda, para
+    usarla como modelo de estilo. Se reconoce por el símbolo de la columna C."""
+    por_simbolo = {v: k for k, v in _SIMBOLO_MONEDA.items()}
+    modelos: dict[str, int] = {}
+    for r in range(1, fin):
+        moneda = por_simbolo.get(str(ws.cell(r, 3).value or "").strip())
+        if moneda and ws.cell(r, 2).value:
+            modelos[moneda] = r
+    return modelos
+
+
 def _agregar_filas_resumen(
     ws, total_rows: dict, operaciones: list, pos_plantilla: set
 ) -> None:
@@ -1173,24 +1185,29 @@ def _agregar_filas_resumen(
     if not f_tot_sol:
         return
 
-    # Las filas van justo antes de 'TOTAL SOLES'; la última operación es el
-    # modelo de estilo.
-    modelo = f_tot_sol - 1
-    estilos = [
-        copy(ws.cell(modelo, c)._style) if ws.cell(modelo, c).has_style else None
-        for c in range(1, _RESUMEN_NCOLS + 1)
-    ]
-    alto = ws.row_dimensions[modelo].height
+    # Las filas van justo antes de 'TOTAL SOLES'. Cada una copia el estilo de
+    # una fila de su misma moneda: el formato de número del importe lleva el
+    # símbolo (S/ o US$), así que un modelo único mostraría todo en dólares.
+    modelos = _modelos_por_moneda(ws, f_tot_sol)
+    estilos = {
+        mon: [
+            copy(ws.cell(fila, c)._style) if ws.cell(fila, c).has_style else None
+            for c in range(1, _RESUMEN_NCOLS + 1)
+        ]
+        for mon, fila in modelos.items()
+    }
+    altos = {mon: ws.row_dimensions[fila].height for mon, fila in modelos.items()}
     _insertar_filas(ws, f_tot_sol, len(nuevas))
 
     agregadas: dict[str, list[int]] = {}
     for i, (clave, etiqueta, moneda) in enumerate(nuevas):
         r = f_tot_sol + i
-        for c, estilo in enumerate(estilos, start=1):
+        modelo_mon = moneda if moneda in estilos else next(iter(estilos), None)
+        for c, estilo in enumerate(estilos.get(modelo_mon) or [], start=1):
             if estilo is not None:
                 ws.cell(r, c)._style = copy(estilo)
-        if alto:
-            ws.row_dimensions[r].height = alto
+        if altos.get(modelo_mon):
+            ws.row_dimensions[r].height = altos[modelo_mon]
         ws.cell(r, 1).value = _BANCO_POR_DEFECTO
         ws.cell(r, 2).value = etiqueta
         ws.cell(r, 3).value = _SIMBOLO_MONEDA.get(moneda, "")
