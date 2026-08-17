@@ -1141,6 +1141,32 @@ _FILAS_FIJAS_RESUMEN = [
 _BANCO_POR_DEFECTO = "BCP"
 # Operaciones cuyo banco en 'I. PAGOS A REALIZAR' difiere del de la plantilla.
 _BANCO_POR_OPERACION = {6: "BCP", 7: "Interbank"}
+# Sección IV (ESTADO DE LIQUIDEZ): cuenta -> qué se paga por ella, con las
+# mismas claves de la sección I (nº de operación o clave de sección fija).
+# 'BCP SOLES' no está: ya apunta al TOTAL SOLES y se actualiza solo.
+_SECCION_LIQUIDEZ = "IV."
+_CUENTAS_LIQUIDEZ = {
+    "BCP DÓLARES": [2, 4, 6, 8, "agentes_USD"],
+    "INTERBANK DÓLARES": [7],
+}
+
+
+def _reapuntar_liquidez(ws, filas_resumen: dict) -> None:
+    """En 'Pagos a Realizar' (col B) de la sección IV, apuntar cada cuenta a las
+    filas de la sección I que se pagan por ese banco. Se recorre solo hasta
+    agotar las cuentas listadas, para no tocar la sección V (que repite las
+    etiquetas y ya referencia a la IV)."""
+    inicio = _fila_etiqueta(ws, _SECCION_LIQUIDEZ)
+    if inicio is None:
+        return
+    pendientes = dict(_CUENTAS_LIQUIDEZ)
+    for r in range(inicio + 1, ws.max_row + 1):
+        claves = pendientes.pop(str(ws.cell(r, 1).value or "").strip().upper(), None)
+        filas = [filas_resumen[c] for c in claves or [] if c in filas_resumen]
+        if filas:
+            ws.cell(r, 2).value = "=+" + "+".join(f"D{f}" for f in filas)
+        if not pendientes:
+            return
 _SIMBOLO_MONEDA = {"SOL": "S/", "USD": "US$"}
 _TOTAL_POR_MONEDA = {"SOL": "TOTAL SOLES", "USD": "TOTAL DÓLARES"}
 
@@ -1159,11 +1185,13 @@ def _modelos_por_moneda(ws, fin: int) -> dict[str, int]:
 
 def _agregar_filas_resumen(
     ws, total_rows: dict, operaciones: list, pos_plantilla: set
-) -> None:
+) -> dict:
     """Agrega a 'I. PAGOS A REALIZAR' una fila por cada sección del Detalle que
     la plantilla no trae: operaciones nuevas (una 8ª, 9ª...), agentes de aduana
     y las secciones fijas. Cada una se suma al TOTAL de su moneda SIN reescribir
-    la fórmula existente: se le anexan las referencias nuevas al final."""
+    la fórmula existente: se le anexan las referencias nuevas al final.
+
+    Devuelve la fila del Resumen en que quedó cada clave."""
     op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
     op_moneda = {o["pos"]: o.get("moneda", "") for o in operaciones}
 
@@ -1180,10 +1208,10 @@ def _agregar_filas_resumen(
     ]
     nuevas += [d for d in _FILAS_FIJAS_RESUMEN if d[0] in total_rows]
     if not nuevas:
-        return
+        return {}
     f_tot_sol = _fila_etiqueta(ws, "TOTAL SOLES")
     if not f_tot_sol:
-        return
+        return {}
 
     # Las filas van justo antes de 'TOTAL SOLES'. Cada una copia el estilo de
     # una fila de su misma moneda: el formato de número del importe lleva el
@@ -1200,8 +1228,10 @@ def _agregar_filas_resumen(
     _insertar_filas(ws, f_tot_sol, len(nuevas))
 
     agregadas: dict[str, list[int]] = {}
+    filas_por_clave: dict = {}
     for i, (clave, etiqueta, moneda) in enumerate(nuevas):
         r = f_tot_sol + i
+        filas_por_clave[clave] = r
         modelo_mon = moneda if moneda in estilos else next(iter(estilos), None)
         for c, estilo in enumerate(estilos.get(modelo_mon) or [], start=1):
             if estilo is not None:
@@ -1227,6 +1257,7 @@ def _agregar_filas_resumen(
             f"{actual}+{extra}" if isinstance(actual, str) and actual.startswith("=")
             else f"={extra}"
         )
+    return filas_por_clave
 
 
 def _fila_etiqueta(ws, texto: str) -> int | None:
@@ -1253,13 +1284,13 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
     # Re-rotulamos la etiqueta con el nombre actual (la plantilla puede tenerlo
     # desactualizado) y re-apuntamos la fórmula a la nueva fila TOTAL. El Neto
     # está ahora en la columna P del Detalle (antes O, por la columna RUC).
-    pos_plantilla: set[int] = set()
+    filas_resumen: dict = {}   # clave de sección -> fila del Resumen
     for r in range(1, ws.max_row + 1):
         b = ws.cell(r, 2).value
         m = _OPERACION_RE.match(str(b)) if b else None
         if m:
             pos = int(m.group(1))
-            pos_plantilla.add(pos)
+            filas_resumen[pos] = r
             ws.cell(r, 2).value = _titulo_operacion(
                 pos, op_texto.get(pos), op_moneda.get(pos)
             )
@@ -1268,7 +1299,12 @@ def _rellenar_resumen(wb, total_rows: dict, operaciones: list) -> None:
             if pos in total_rows:
                 ws.cell(r, 4).value = f"=+Detalle!P{total_rows[pos]}"
 
-    _agregar_filas_resumen(ws, total_rows, operaciones, pos_plantilla)
+    # Las filas nuevas van después de las operaciones, así que las de la
+    # plantilla no se mueven y sus números siguen valiendo.
+    filas_resumen |= _agregar_filas_resumen(
+        ws, total_rows, operaciones, set(filas_resumen)
+    )
+    _reapuntar_liquidez(ws, filas_resumen)
 
     # La columna de 'Operación' se ajusta a las etiquetas ya reescritas.
     _ajustar_ancho_operacion(ws)
