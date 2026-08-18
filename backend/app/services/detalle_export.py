@@ -1394,6 +1394,44 @@ def _fila_etiqueta(ws, texto: str) -> int | None:
             return r
     return None
 
+# Desglose manual del ingreso estimado (sección III): filas en blanco para
+# detallarlo a mano. La etiqueta y el importe van combinados (A:B y C:D).
+_ETIQUETA_INGRESO = "(+) Ingreso estimado"
+_FILAS_INGRESO = 10
+_COL_VALOR_PROYECTADO = 3
+
+
+def _desglosar_ingreso_estimado(ws) -> None:
+    """Abre filas en blanco bajo '(+) Ingreso estimado' para anotar de dónde
+    sale, y deja esa fila como la suma del desglose. El resto de la sección no
+    se toca: sigue leyendo el mismo importe, ahora calculado."""
+    r = _fila_etiqueta(ws, _ETIQUETA_INGRESO)
+    if r is None:
+        return
+    estilos = [
+        copy(ws.cell(r, c)._style) if ws.cell(r, c).has_style else None
+        for c in range(1, _RESUMEN_NCOLS + 1)
+    ]
+    alto = ws.row_dimensions[r].height
+    _insertar_filas(ws, r + 1, _FILAS_INGRESO)
+
+    for fila in range(r + 1, r + 1 + _FILAS_INGRESO):
+        for c, estilo in enumerate(estilos, start=1):
+            if estilo is not None:
+                ws.cell(fila, c)._style = copy(estilo)
+        if alto:
+            ws.row_dimensions[fila].height = alto
+        ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=2)
+        ws.merge_cells(
+            start_row=fila, start_column=_COL_VALOR_PROYECTADO,
+            end_row=fila, end_column=_RESUMEN_NCOLS,
+        )
+
+    col = get_column_letter(_COL_VALOR_PROYECTADO)
+    ws.cell(r, _COL_VALOR_PROYECTADO).value = (
+        f"=SUM({col}{r + 1}:{col}{r + _FILAS_INGRESO})"
+    )
+
 
 def _rellenar_resumen(
     wb, total_rows: dict, operaciones: list, numeros: dict | None = None
@@ -1451,6 +1489,7 @@ def _rellenar_resumen(
     if f_tot_sol:
         _recalcular_totales_moneda(ws, f_tot_sol)
     _reapuntar_liquidez(ws, filas_resumen)
+    _desglosar_ingreso_estimado(ws)
 
     # La columna de 'Operación' se ajusta a las etiquetas ya reescritas.
     _ajustar_ancho_operacion(ws)
