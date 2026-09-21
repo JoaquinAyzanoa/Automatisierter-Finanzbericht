@@ -241,12 +241,12 @@ def test_seleccionar_facturas_suma_agentes_identificados():
         ("", True, 90280.99),            # sin agente: un abono por O/C
         ("", True, 30104.41),
     ]
-    # Cada O/C es un documento, con el número de O/C completo y su Neto
+    # Cada O/C es un documento, con el número de O/C sin guion y su Neto
     # (en la 10031696, 394.35 del agente + 50 de la naviera).
     assert [(d.numero, d.monto) for d in abonos[1].documentos] == [
-        ("10031696", 444.35), ("32053-5", 854.58),
+        ("10031696", 444.35), ("320535", 854.58),
     ]
-    assert [d.numero for d in abonos[2].documentos] == ["31637-4"]
+    assert [d.numero for d in abonos[2].documentos] == ["316374"]
     assert abonos[2].nombre == "Colocar nombre de agente manualmente"
     assert (abonos[2].cuenta, abonos[2].en_bd) == ("", False)
     assert facturas["SOL"] == []
