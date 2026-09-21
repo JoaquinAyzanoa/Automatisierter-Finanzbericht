@@ -499,16 +499,12 @@ export function Informes({ procesoId }: Props) {
         const sinCuenta = m.sin_cuenta
           ? `, ${m.sin_cuenta} sin cuenta en la base (van en blanco para completarla)`
           : "";
-        partes.push(`${etiqueta}: ${m.abonos.length} proveedores${sinCuenta}`);
+        const sinAgente = m.sin_agente
+          ? `, ${m.sin_agente} de agentes sin identificar (por O/C: completa agente, RUC y cuenta)`
+          : "";
+        partes.push(`${etiqueta}: ${m.abonos.length} abonos${sinCuenta}${sinAgente}`);
       }
-      // O/C de agentes sin agente identificado: no entran, pero se avisan.
-      const omitidos = monedas.flatMap((m) =>
-        m.omitidos.map((o) => `O/C ${o.oc} (${o.proveedores.join(", ")})`)
-      );
-      const avisoOmitidos = omitidos.length
-        ? ` No entraron por no tener agente identificado: ${omitidos.join("; ")}.`
-        : "";
-      setAvisoMacros(`Macros descargadas. ${partes.join(" · ")}.${avisoOmitidos}`);
+      setAvisoMacros(`Macros descargadas. ${partes.join(" · ")}.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudieron generar las macros.");
     } finally {

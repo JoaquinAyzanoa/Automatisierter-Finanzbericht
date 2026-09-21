@@ -253,23 +253,18 @@ export function PagosMasivos() {
                 {mm.sin_cuenta > 0 && (
                   <div className="pagos__aviso">
                     {mm.sin_cuenta === 1
-                      ? "1 proveedor no está en la base de cuentas"
-                      : `${mm.sin_cuenta} proveedores no están en la base de cuentas`}
+                      ? "1 abono no tiene cuenta en la base"
+                      : `${mm.sin_cuenta} abonos no tienen cuenta en la base`}
                     : van en la macro con la cuenta en blanco para completarla a mano.
                   </div>
                 )}
-                {mm.omitidos.length > 0 && (
+                {mm.sin_agente > 0 && (
                   <div className="pagos__aviso">
-                    No entran en la macro por no tener agente identificado
-                    («Colocar nombre de agente manualmente»):
-                    <ul>
-                      {mm.omitidos.map((o) => (
-                        <li key={o.oc}>
-                          O/C {o.oc} — {o.proveedores.join(", ")} — {info.simbolo}{" "}
-                          {formatoMonto(o.total)}
-                        </li>
-                      ))}
-                    </ul>
+                    {mm.sin_agente === 1
+                      ? "1 pago a agente sin identificar va"
+                      : `${mm.sin_agente} pagos a agentes sin identificar van`}{" "}
+                    agrupado por O/C con su total: completa el agente, su RUC y su
+                    cuenta en la macro.
                   </div>
                 )}
 
@@ -295,7 +290,11 @@ export function PagosMasivos() {
                           <tr key={a.ruc || a.nombre} className={a.en_bd ? "" : "is-sinCuenta"}>
                             <td>
                               {a.nombre}
-                              {a.agente && <span className="pagos__tag">Agente</span>}
+                              {a.agente && (
+                                <span className="pagos__tag">
+                                  {a.ruc ? "Agente" : "Agente sin identificar"}
+                                </span>
+                              )}
                             </td>
                             <td>{a.ruc}</td>
                             <td>{a.tipo_cuenta || "—"}</td>

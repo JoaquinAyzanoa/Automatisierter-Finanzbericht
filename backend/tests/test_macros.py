@@ -200,7 +200,8 @@ def test_subir_archivos(client):
 
 def test_seleccionar_facturas_suma_agentes_identificados():
     """Pago masivo por proveedor y, después, los pagos a agentes: una O/C con
-    agente se le paga al agente; una sin agente queda fuera y se avisa."""
+    agente se le paga al agente; las O/C sin agente van cada una en su abono,
+    con el total de la O/C y el RUC y la cuenta en blanco."""
     from app.services import detalle_export
     from app.services.macro_service import seleccionar_facturas
 
@@ -223,20 +224,22 @@ def test_seleccionar_facturas_suma_agentes_identificados():
             fila("20492185087", "HAPAG LLOYD", "F001-77", 2, oc="10031696", saldo="50"),
             # O/C de un proveedor relacionado sin factura del agente.
             fila("831197135", "NOURYON LLC", "5103572506", 3, oc="31637-4", saldo="90280.99"),
+            fila("831197135", "NOURYON LLC", "5103572505", 3, oc="31637-5", saldo="30104.41"),
         ],
     }
     calc = detalle_export.preparar_calculo(
         data, agente_rucs=["20213635531"], relacionados_rucs=["831197135"]
     )
-    facturas, omitidos = seleccionar_facturas(data, calc)
+    facturas = seleccionar_facturas(data, calc)
 
     abonos = macro_bcp.armar_abonos(facturas["USD"], {})
     assert [(a.ruc, a.agente, a.total) for a in abonos] == [
         ("20111111111", False, 100.0),
         ("20213635531", True, 444.35),   # 394.35 del agente + 50 de la naviera
+        ("", True, 90280.99),            # sin agente: un abono por O/C
+        ("", True, 30104.41),
     ]
     assert [d.numero for d in abonos[1].documentos] == ["153142", "77"]
+    assert abonos[2].nombre == "Colocar nombre de agente manualmente - O/C 31637-4"
+    assert (abonos[2].cuenta, abonos[2].en_bd) == ("", False)
     assert facturas["SOL"] == []
-    assert omitidos["USD"] == [
-        {"oc": "31637-4", "total": 90280.99, "proveedores": ["NOURYON LLC"]}
-    ]

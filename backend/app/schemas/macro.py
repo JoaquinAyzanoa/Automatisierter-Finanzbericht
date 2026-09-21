@@ -30,13 +30,6 @@ class AbonoPago(BaseModel):
     documentos: list[DocumentoPago]
 
 
-class AgenteOmitido(BaseModel):
-    """O/C de agentes sin agente identificado: no entra en la macro."""
-
-    oc: str
-    total: float
-    proveedores: list[str]
-
 
 class MacroMoneda(BaseModel):
     moneda: Moneda
@@ -44,9 +37,10 @@ class MacroMoneda(BaseModel):
     total: float
     n_documentos: int
     sin_cuenta: int
+    # Pagos a agentes sin agente identificado (van por O/C, sin RUC ni cuenta).
+    sin_agente: int
     # Falta subir la plantilla o la base de esta moneda.
     faltan: list[str]
-    omitidos: list[AgenteOmitido]
 
 
 class VistaPreviaMacros(BaseModel):

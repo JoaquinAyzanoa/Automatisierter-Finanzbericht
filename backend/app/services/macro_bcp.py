@@ -124,14 +124,16 @@ class Abono:
 
 
 def armar_abonos(facturas: list[tuple[dict, float]], cuentas: dict[str, dict]) -> list[Abono]:
-    """Un abono por RUC, en el orden en que aparece cada proveedor. `facturas`
-    son (fila del proceso, neto); una fila con `__agente` es de un pago a agente
-    de aduana. El nombre y la cuenta salen de la base; si el RUC no está, va con
-    el nombre del informe y la cuenta en blanco, para completarla a mano."""
+    """Un abono por RUC (o por `__grupo`, si la fila lo trae), en el orden en que
+    aparece cada uno. `facturas` son (fila del proceso, neto); una fila con
+    `__agente` es de un pago a agente de aduana. El nombre y la cuenta salen de
+    la base; si el RUC no está, va con el nombre del informe y la cuenta en
+    blanco, para completarla a mano."""
     por_ruc: dict[str, Abono] = {}
     for fila, neto in facturas:
         ruc = _norm_ruc(fila.get("RUC"))
-        abono = por_ruc.get(ruc)
+        clave = fila.get("__grupo") or ruc
+        abono = por_ruc.get(clave)
         if abono is None:
             cta = cuentas.get(ruc)
             abono = Abono(
@@ -143,7 +145,7 @@ def armar_abonos(facturas: list[tuple[dict, float]], cuentas: dict[str, dict]) -
                 en_bd=cta is not None,
                 agente=bool(fila.get("__agente")),
             )
-            por_ruc[ruc] = abono
+            por_ruc[clave] = abono
         abono.documentos.append(Documento(numero_documento(fila.get("NUMERO")), round(neto, 2)))
     return list(por_ruc.values())
 

@@ -564,21 +564,15 @@ export interface AbonoMacro {
   documentos: { numero: string; monto: number }[];
 }
 
-/** O/C de agentes sin agente identificado: no entra en la macro. */
-export interface AgenteOmitido {
-  oc: string;
-  total: number;
-  proveedores: string[];
-}
-
 export interface MacroMoneda {
   moneda: MonedaMacro;
   abonos: AbonoMacro[];
   total: number;
   n_documentos: number;
   sin_cuenta: number;
+  /** Pagos a agentes sin agente identificado (por O/C, sin RUC ni cuenta). */
+  sin_agente: number;
   faltan: string[];
-  omitidos: AgenteOmitido[];
 }
 
 export async function listarArchivosMacro(
