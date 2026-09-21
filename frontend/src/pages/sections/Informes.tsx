@@ -216,7 +216,9 @@ export function Informes({ procesoId }: Props) {
   const operaciones = data?.operaciones ?? [];
 
   // O/C consolidadas (por RUC de agente/relacionado) y nombre del agente real
-  // por O/C. Mismo criterio que la descarga (detalle_export).
+  // por O/C. Mismo criterio que la descarga (detalle_export): solo consolida
+  // una factura que entra al informe; la que se pasó a "Otros" o se reasignó a
+  // mano no arrastra a las demás de su O/C.
   const { ocsConsolidadas, agenteNombrePorOc } = useMemo(() => {
     const agentes = new Set(agenteRucs.map(normRuc).filter(Boolean));
     const relacionados = new Set(agenteRelacionados.map(normRuc).filter(Boolean));
@@ -228,14 +230,17 @@ export function Informes({ procesoId }: Props) {
       const oc = String(f["ORD_COMPRA"] ?? "").trim();
       if (!oc) continue;
       const ruc = normRuc(f["RUC"]);
-      if (disparadores.has(ruc)) ocs.add(oc);
+      const id = f["__id"] as number;
+      const manual = id in overrides || !!f["__manual"];
+      const vigente = !manual && f["__pos"] != null;
+      if (disparadores.has(ruc) && vigente) ocs.add(oc);
       // El agente real tiene prioridad para nombrar la O/C.
       if (agentes.has(ruc) && !nombre.has(oc)) {
         nombre.set(oc, String(f["PROVEEDOR"] ?? "").trim());
       }
     }
     return { ocsConsolidadas: ocs, agenteNombrePorOc: nombre };
-  }, [data, agenteRucs, agenteRelacionados]);
+  }, [data, agenteRucs, agenteRelacionados, overrides]);
 
   // Una factura va a "Agentes de aduana" si su O/C está consolidada o su TIPO
   // es de agente (21). Coincide con la descarga.

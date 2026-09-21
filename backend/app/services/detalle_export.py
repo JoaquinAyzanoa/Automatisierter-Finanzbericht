@@ -269,7 +269,10 @@ def _agrupar_agentes(
     """Agrupa las facturas que van a 'Detalle de agentes'.
 
     - Una O/C se consolida (TODAS sus facturas) si incluye un RUC de agente o de
-      proveedor relacionado.
+      proveedor relacionado, en una factura que entra al informe. Una que se
+      pasó a 'Otros' (a mano o por el filtro de fechas) no se paga ahora, así
+      que no arrastra a las demás de su O/C: si no, la mercadería de un
+      proveedor del exterior terminaría depositándose a un agente.
     - Además, cualquier factura con TIPO 21 va a agentes por sí sola (aunque su
       O/C no se consolide).
 
@@ -293,7 +296,8 @@ def _agrupar_agentes(
         if not oc:
             continue
         ruc = _norm_ruc(f.get("RUC", ""))
-        if ruc in disparadores:
+        vigente = not f.get("__manual") and f.get("__pos") is not None
+        if ruc in disparadores and vigente:
             ocs_consolidadas.add(oc)
         if ruc in agentes and oc not in agente_nombre_oc:
             agente_nombre_oc[oc] = str(f.get("PROVEEDOR", "")).strip()
