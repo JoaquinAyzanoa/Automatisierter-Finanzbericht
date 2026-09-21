@@ -477,7 +477,7 @@ export function Informes({ procesoId }: Props) {
       const { monedas } = await vistaPreviaMacros(token, data.id);
       const conPagos = monedas.filter((m) => m.abonos.length > 0);
       if (conPagos.length === 0) {
-        setAvisoMacros("Este informe no tiene pagos masivos.");
+        setAvisoMacros("Este informe no tiene pagos masivos ni pagos a agentes.");
         return;
       }
       const sinPlantilla = conPagos.filter((m) =>
@@ -501,7 +501,14 @@ export function Informes({ procesoId }: Props) {
           : "";
         partes.push(`${etiqueta}: ${m.abonos.length} proveedores${sinCuenta}`);
       }
-      setAvisoMacros(`Macros descargadas. ${partes.join(" · ")}.`);
+      // O/C de agentes sin agente identificado: no entran, pero se avisan.
+      const omitidos = monedas.flatMap((m) =>
+        m.omitidos.map((o) => `O/C ${o.oc} (${o.proveedores.join(", ")})`)
+      );
+      const avisoOmitidos = omitidos.length
+        ? ` No entraron por no tener agente identificado: ${omitidos.join("; ")}.`
+        : "";
+      setAvisoMacros(`Macros descargadas. ${partes.join(" · ")}.${avisoOmitidos}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudieron generar las macros.");
     } finally {
@@ -699,7 +706,7 @@ export function Informes({ procesoId }: Props) {
           className="informes__download informes__download--sec"
           onClick={handleMacros}
           disabled={generandoMacros || !hayDatos}
-          title="Macros de pago masivo del BCP (soles y dólares) de este informe"
+          title="Macros de pago masivo del BCP (soles y dólares) de este informe, con los pagos a agentes de aduana"
         >
           <span className="informes__downloadIcon">{downloadIcon}</span>
           {generandoMacros ? "Generando…" : "Macros BCP"}

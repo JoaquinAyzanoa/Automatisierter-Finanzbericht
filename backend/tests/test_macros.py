@@ -196,3 +196,47 @@ def test_subir_archivos(client):
     assert r.status_code == 422
     r = client.post(f"{url}/otro", headers=headers, files={"archivo": ("x", b"x")})
     assert r.status_code == 422
+
+
+def test_seleccionar_facturas_suma_agentes_identificados():
+    """Pago masivo por proveedor y, después, los pagos a agentes: una O/C con
+    agente se le paga al agente; una sin agente queda fuera y se avisa."""
+    from app.services import detalle_export
+    from app.services.macro_service import seleccionar_facturas
+
+    def fila(ruc, prov, numero, pos, moneda="USD", oc="", saldo="100"):
+        return {"RUC": ruc, "PROVEEDOR": prov, "NUMERO": numero, "__pos": pos,
+                "MONEDA": moneda, "ORD_COMPRA": oc, "TIPO": "01", "IMPORTE": saldo,
+                "PAGADO": "0", "SALDO": saldo, "DETRACCION": "0"}
+
+    data = {
+        "operaciones": [
+            {"pos": 1, "texto": "Pago masivo proveedores", "moneda": "SOL"},
+            {"pos": 2, "texto": "Pago masivo proveedores", "moneda": "USD"},
+            {"pos": 3, "texto": "Materia Prima Exterior", "moneda": "USD"},
+        ],
+        "filas": [
+            fila("20111111111", "PROVEEDOR UNO", "F001-1", 2),
+            fila("20333333333", "OTRA OPERACION", "F001-9", 3),
+            # O/C con agente: su factura y la de la naviera van al agente.
+            fila("20213635531", "DOGANA S.A.", "F003-153142", 2, oc="10031696", saldo="394.35"),
+            fila("20492185087", "HAPAG LLOYD", "F001-77", 2, oc="10031696", saldo="50"),
+            # O/C de un proveedor relacionado sin factura del agente.
+            fila("831197135", "NOURYON LLC", "5103572506", 3, oc="31637-4", saldo="90280.99"),
+        ],
+    }
+    calc = detalle_export.preparar_calculo(
+        data, agente_rucs=["20213635531"], relacionados_rucs=["831197135"]
+    )
+    facturas, omitidos = seleccionar_facturas(data, calc)
+
+    abonos = macro_bcp.armar_abonos(facturas["USD"], {})
+    assert [(a.ruc, a.agente, a.total) for a in abonos] == [
+        ("20111111111", False, 100.0),
+        ("20213635531", True, 444.35),   # 394.35 del agente + 50 de la naviera
+    ]
+    assert [d.numero for d in abonos[1].documentos] == ["153142", "77"]
+    assert facturas["SOL"] == []
+    assert omitidos["USD"] == [
+        {"oc": "31637-4", "total": 90280.99, "proveedores": ["NOURYON LLC"]}
+    ]

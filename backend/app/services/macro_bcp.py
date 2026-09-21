@@ -1,8 +1,9 @@
 """Macros de pago masivo a proveedores del BCP (una por moneda).
 
-A partir de las facturas de 'Pago masivo proveedores' se arma un abono por
-proveedor (fila 'A', con su cuenta y el total) seguido de sus facturas (filas
-'D'), y se escribe en la plantilla .xlsm del banco.
+A partir de las facturas de 'Pago masivo proveedores' y de los pagos a agentes
+de aduana se arma un abono por beneficiario (fila 'A', con su cuenta y el total)
+seguido de sus facturas (filas 'D'), y se escribe en la plantilla .xlsm del
+banco. Qué facturas entran lo decide macro_service.
 
 La plantilla se edita directamente en su XML y solo en las celdas que cambian
 (fila 7 y las filas de abonos). No se usa openpyxl para guardarla porque
@@ -113,6 +114,7 @@ class Abono:
     cuenta: str
     tipo_doc: str
     en_bd: bool
+    agente: bool = False     # pago a un agente de aduana (no de Pago masivo)
     documentos: list[Documento] = field(default_factory=list)
 
     @property
@@ -123,9 +125,9 @@ class Abono:
 
 def armar_abonos(facturas: list[tuple[dict, float]], cuentas: dict[str, dict]) -> list[Abono]:
     """Un abono por RUC, en el orden en que aparece cada proveedor. `facturas`
-    son (fila del proceso, neto). El nombre y la cuenta salen de la base; si el
-    RUC no está, va con el nombre del informe y la cuenta en blanco, para
-    completarla a mano en la macro."""
+    son (fila del proceso, neto); una fila con `__agente` es de un pago a agente
+    de aduana. El nombre y la cuenta salen de la base; si el RUC no está, va con
+    el nombre del informe y la cuenta en blanco, para completarla a mano."""
     por_ruc: dict[str, Abono] = {}
     for fila, neto in facturas:
         ruc = _norm_ruc(fila.get("RUC"))
@@ -139,6 +141,7 @@ def armar_abonos(facturas: list[tuple[dict, float]], cuentas: dict[str, dict]) -
                 cuenta=(cta or {}).get("cuenta", ""),
                 tipo_doc=(cta or {}).get("tipo_doc") or "6",
                 en_bd=cta is not None,
+                agente=bool(fila.get("__agente")),
             )
             por_ruc[ruc] = abono
         abono.documentos.append(Documento(numero_documento(fila.get("NUMERO")), round(neto, 2)))

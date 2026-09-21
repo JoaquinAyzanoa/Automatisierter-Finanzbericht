@@ -138,7 +138,8 @@ export function PagosMasivos() {
     <section className="panel">
       <p className="panel__lead">
         Genera las macros de pago masivo del BCP a partir de un informe ya
-        procesado. Solo entra «Pago masivo proveedores», con el Neto del informe.
+        procesado. Entran «Pago masivo proveedores» y los pagos a agentes de
+        aduana, con el Neto del informe.
       </p>
 
       {error && <div className="pagos__error">{error}</div>}
@@ -257,6 +258,20 @@ export function PagosMasivos() {
                     : van en la macro con la cuenta en blanco para completarla a mano.
                   </div>
                 )}
+                {mm.omitidos.length > 0 && (
+                  <div className="pagos__aviso">
+                    No entran en la macro por no tener agente identificado
+                    («Colocar nombre de agente manualmente»):
+                    <ul>
+                      {mm.omitidos.map((o) => (
+                        <li key={o.oc}>
+                          O/C {o.oc} — {o.proveedores.join(", ")} — {info.simbolo}{" "}
+                          {formatoMonto(o.total)}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {mm.abonos.length === 0 ? (
                   <p className="pagos__vacio">
@@ -278,7 +293,10 @@ export function PagosMasivos() {
                       <tbody>
                         {mm.abonos.map((a) => (
                           <tr key={a.ruc || a.nombre} className={a.en_bd ? "" : "is-sinCuenta"}>
-                            <td>{a.nombre}</td>
+                            <td>
+                              {a.nombre}
+                              {a.agente && <span className="pagos__tag">Agente</span>}
+                            </td>
                             <td>{a.ruc}</td>
                             <td>{a.tipo_cuenta || "—"}</td>
                             <td>{a.en_bd ? a.cuenta : "Sin cuenta"}</td>

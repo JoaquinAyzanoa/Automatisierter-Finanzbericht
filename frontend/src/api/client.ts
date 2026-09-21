@@ -558,8 +558,17 @@ export interface AbonoMacro {
   tipo_cuenta: string;
   cuenta: string;
   en_bd: boolean;
+  /** Pago a un agente de aduana (no de Pago masivo). */
+  agente: boolean;
   total: number;
   documentos: { numero: string; monto: number }[];
+}
+
+/** O/C de agentes sin agente identificado: no entra en la macro. */
+export interface AgenteOmitido {
+  oc: string;
+  total: number;
+  proveedores: string[];
 }
 
 export interface MacroMoneda {
@@ -569,6 +578,7 @@ export interface MacroMoneda {
   n_documentos: number;
   sin_cuenta: number;
   faltan: string[];
+  omitidos: AgenteOmitido[];
 }
 
 export async function listarArchivosMacro(
