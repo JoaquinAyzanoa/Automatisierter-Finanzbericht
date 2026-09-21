@@ -39,6 +39,14 @@ _COL_RUC = 2
 _COL_LINK = 20
 _LINK_FONT = Font(color="0563C1", underline="single")
 
+# En el 'Detalle' el Neto se desdobla en dos columnas, una por moneda, para que
+# una misma sección pueda llevar facturas en soles y en dólares. Eso corre una
+# columna a la derecha lo que viene después (DETALLE, O/C, N° Registro, link).
+# 'Detalle de agentes' conserva su layout: sigue con _nc y _COL_LINK.
+_COL_NETO_SOL = 16
+_COL_NETO_USD = 17
+_COL_LINK_DET = 21
+
 # Columna DET: formato contable con 2 decimales (cero -> guion).
 _COL_DET = 13
 _DET_FMT = "_-* #,##0.00_-;\\-* #,##0.00_-;_-* \\-??_-;_-@_-"
@@ -72,13 +80,16 @@ _FILAS_EN_BLANCO_SECCION = 2
 _TXT = {
     1: "PROVEEDOR", 2: "RUC", 3: "TIPO", 4: "NUMERO",
     5: "FEC REGISTRO", 6: "FECHA DOC.", 7: "FEC. VCTO",
-    17: "PRODUCTO", 18: "ORD_COMPRA", 19: "REGISTRO", 20: "REGISTRO",
+    18: "PRODUCTO", 19: "ORD_COMPRA", 20: "REGISTRO", 21: "REGISTRO",
 }
 _FECHA_COLS = {5, 6, 7}
 
 # Encabezados (columna de la SALIDA -> texto) que la plantilla deja en blanco en
 # las secciones fijas: AGENTES DE ADUANAS, PAGOS AL PERSONAL y PAGOS ANTICIPADOS.
-_ENCABEZADOS_FALTANTES = {11: "PLAZO", 16: "NETO", 19: "N° REGISTRO"}
+_ENCABEZADOS_FALTANTES = {11: "PLAZO", 20: "N° REGISTRO"}
+# Cabecera de las dos columnas de Neto: se escribe siempre, porque la plantilla
+# trae una sola columna 'Neto'.
+_ENCABEZADOS_NETO = {_COL_NETO_SOL: "NETO S/", _COL_NETO_USD: "NETO US$"}
 
 
 def _num(value) -> float:
@@ -331,6 +342,20 @@ def _nc(c: int) -> int:
     return c if c == 1 else c + 1
 
 
+def _nc_det(c: int) -> int:
+    """Como `_nc`, pero para el 'Detalle': además deja libre la columna 17 para
+    el Neto en dólares, así que de la columna 16 de la plantilla en adelante
+    corre dos lugares."""
+    if c == 1:
+        return 1
+    return c + 1 if c < _COL_NETO_SOL else c + 2
+
+
+def _col_neto(moneda) -> int:
+    """Columna del Detalle donde va el Neto de una factura, según su moneda."""
+    return _COL_NETO_SOL if str(moneda or "").strip().upper() == "SOL" else _COL_NETO_USD
+
+
 # Las secciones fijas de la plantilla traen bordes incompletos (muchas columnas
 # sin ningún lado), y al ir casi vacías se ven como cajas cortadas. A esas
 # secciones se les aplica una cuadrícula fina completa.
@@ -363,19 +388,29 @@ _COLS_CENTRAR = range(2, 8)
 
 
 def _copiar_fila_desplazada(
-    src, dst, src_r, dst_r, ncols_src, ruc_val=None, es_cabecera=False
+    src, dst, src_r, dst_r, ncols_src, ruc_val=None, es_cabecera=False,
+    detalle=False,
 ) -> None:
     """Copia una fila de la plantilla a la salida con el desplazamiento de la
-    columna RUC. Rellena la col RUC con `ruc_val` (o 'RUC' si es cabecera)."""
+    columna RUC. Rellena la col RUC con `ruc_val` (o 'RUC' si es cabecera).
+    Con `detalle`, usa el layout del 'Detalle' (Neto en dos columnas)."""
+    nc = _nc_det if detalle else _nc
     _copiar_celda(src.cell(src_r, 1), dst.cell(dst_r, 1), src_r, dst_r, 1, 1)
     for c in range(2, ncols_src + 1):
-        _copiar_celda(src.cell(src_r, c), dst.cell(dst_r, _nc(c)), src_r, dst_r, c, _nc(c))
+        _copiar_celda(src.cell(src_r, c), dst.cell(dst_r, nc(c)), src_r, dst_r, c, nc(c))
     # Columna RUC (2) con el estilo de la columna TIPO (src col 2).
     _clonar_estilo(dst.cell(dst_r, _COL_RUC), src.cell(src_r, 2))
     dst.cell(dst_r, _COL_RUC).value = "RUC" if es_cabecera else ruc_val
+    if detalle:
+        # Neto en dólares: mismo estilo que el de soles, vacío (o su cabecera).
+        _clonar_estilo(dst.cell(dst_r, _COL_NETO_USD), dst.cell(dst_r, _COL_NETO_SOL))
+        dst.cell(dst_r, _COL_NETO_USD).value = None
+        if es_cabecera:
+            for c, texto in _ENCABEZADOS_NETO.items():
+                dst.cell(dst_r, c).value = texto
     # Los encabezados de columna van centrados horizontalmente.
     if es_cabecera:
-        for c in range(1, _COL_LINK + 1):
+        for c in range(1, (_COL_LINK_DET if detalle else _COL_LINK) + 1):
             _centrar_horizontal(dst.cell(dst_r, c))
 
 
@@ -384,7 +419,8 @@ def _es_cabecera(ws, r) -> bool:
     return bool(v) and str(v).strip().upper() == "PROVEEDOR"
 
 
-def _copiar_anchos(src, dst) -> None:
+def _copiar_anchos(src, dst, detalle=False) -> None:
+    nc = _nc_det if detalle else _nc
     for letra, dim in src.column_dimensions.items():
         if not dim.width:
             continue
@@ -392,13 +428,15 @@ def _copiar_anchos(src, dst) -> None:
             idx = column_index_from_string(letra)
         except Exception:
             continue
-        dst.column_dimensions[get_column_letter(_nc(idx))].width = dim.width
+        dst.column_dimensions[get_column_letter(nc(idx))].width = dim.width
     dst.column_dimensions[get_column_letter(_COL_RUC)].width = 16  # RUC
 
 
 # Anchos de las columnas numéricas del 'Detalle' (para que no salgan "######").
-# IMPORTE, PAGADO, SALDO, PLAZO, %DET, DET, %RET, RET, Neto.
-_ANCHOS_NUM_DETALLE = {8: 12, 9: 11, 10: 12, 11: 7, 12: 8, 13: 12, 14: 8, 15: 10, 16: 12}
+# IMPORTE, PAGADO, SALDO, PLAZO, %DET, DET, %RET, RET, Neto S/, Neto US$.
+_ANCHOS_NUM_DETALLE = {
+    8: 12, 9: 11, 10: 12, 11: 7, 12: 8, 13: 12, 14: 8, 15: 10, 16: 12, 17: 12,
+}
 
 
 def _detectar_operaciones(ws: Worksheet) -> dict:
@@ -500,41 +538,45 @@ def _ref_agentes(fila: int) -> str:
 
 
 def _escribir_resumen_agente(
-    src, estilo_row, dst, r, nombre, ruc, oc, total, ncols_src, ref_row=None
+    src, estilo_row, dst, r, nombre, ruc, oc, total, ncols_src, ref_row=None,
+    moneda="SOL",
 ):
     """Fila resumen de la sección Agentes: nombre, RUC y O/C del agente y el
-    total (Neto) a depositar. Si se da `ref_row`, el total se enlaza por fórmula
-    a la hoja 'Detalle de agentes'; si no, se escribe el monto calculado."""
-    _copiar_fila_desplazada(src, dst, estilo_row, r, ncols_src, ruc_val=None)
-    for c in range(1, _COL_LINK + 1):
+    total (Neto) a depositar, en la columna de su moneda. Si se da `ref_row`, el
+    total se enlaza por fórmula a la hoja 'Detalle de agentes'; si no, se
+    escribe el monto calculado."""
+    _copiar_fila_desplazada(src, dst, estilo_row, r, ncols_src, ruc_val=None, detalle=True)
+    for c in range(1, _COL_LINK_DET + 1):
         dst.cell(r, c).value = None
     dst.cell(r, 1).value = nombre      # PROVEEDOR
     dst.cell(r, _COL_RUC).value = ruc  # RUC (del agente de la col A)
-    dst.cell(r, 16).value = _ref_agentes(ref_row) if ref_row else total  # Neto (P)
-    dst.cell(r, 17).value = nombre     # AGENTE ADUANERO
-    dst.cell(r, 18).value = oc         # N° O/C-O/S
+    dst.cell(r, _col_neto(moneda)).value = _ref_agentes(ref_row) if ref_row else total
+    dst.cell(r, 18).value = nombre     # AGENTE ADUANERO (columna DETALLE)
+    dst.cell(r, 19).value = oc         # N° O/C-O/S
     for c in _COLS_CENTRAR:  # RUC y demás columnas de identificación: centradas
         _centrar_horizontal(dst.cell(r, c))
-    _centrar_horizontal(dst.cell(r, 18))  # N° O/C-O/S centrado
+    _centrar_horizontal(dst.cell(r, 19))  # N° O/C-O/S centrado
 
 
 def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=None) -> None:
     """Escribe una fila de datos del Detalle en `r`, con el estilo (desplazado)
-    de `estilo_row`."""
+    de `estilo_row`. El Neto va en la columna de la moneda de la factura."""
     vals = _valores_fila(fila, ret_cfg)
     _clonar_estilo(dst.cell(r, 1), src.cell(estilo_row, 1))
     dst.cell(r, 1).value = vals.get(1)
     _clonar_estilo(dst.cell(r, _COL_RUC), src.cell(estilo_row, 2))  # RUC (estilo TIPO)
     dst.cell(r, _COL_RUC).value = vals.get(_COL_RUC)
     for c in range(2, ncols_src + 1):
-        d = dst.cell(r, _nc(c))
+        d = dst.cell(r, _nc_det(c))
         _clonar_estilo(d, src.cell(estilo_row, c))
-        d.value = vals.get(_nc(c))
+        d.value = vals.get(_nc_det(c))
+    # Neto en dólares con el mismo estilo que el de soles.
+    _clonar_estilo(dst.cell(r, _COL_NETO_USD), dst.cell(r, _COL_NETO_SOL))
     for c in _COLS_CENTRAR:  # RUC, TIPO, N° DOC y fechas: centrados
         _centrar_horizontal(dst.cell(r, c))
     _centrar_horizontal(dst.cell(r, 12))  # %DET centrado
-    _centrar_horizontal(dst.cell(r, 18))  # N° O/C-O/S centrado
-    _centrar_horizontal(dst.cell(r, 19))  # N° Registro centrado
+    _centrar_horizontal(dst.cell(r, 19))  # N° O/C-O/S centrado
+    _centrar_horizontal(dst.cell(r, 20))  # N° Registro centrado
     # Fechas como fecha real (para que PLAZO pueda restarlas).
     for c in _FECHA_COLS:
         if isinstance(vals.get(c), date):
@@ -556,34 +598,45 @@ def _escribir_fila(src, estilo_row, dst, r, fila, ncols_src, sp_cfg, ret_cfg=Non
     dst.cell(r, 14).border = copy(dst.cell(r, 12).border)
     dst.cell(r, 15).value = f"=ROUND(N{r}*H{r},2)"
     dst.cell(r, 15).number_format = _DET_FMT
-    # Neto (fórmula viva): SALDO(J), DET(M), PAGADO(I), RET(O).
-    dst.cell(r, 16).value = (
+    # Neto (fórmula viva): SALDO(J), DET(M), PAGADO(I), RET(O). Va en la columna
+    # de la moneda de la factura; la otra queda vacía.
+    for c in (_COL_NETO_SOL, _COL_NETO_USD):
+        dst.cell(r, c).value = None
+    dst.cell(r, _col_neto(fila.get("MONEDA"))).value = (
         f"=IF(AND(M{r}>0,ABS(I{r}-M{r})<1),J{r},"
         f"IF(AND(M{r}>0,I{r}=0),J{r}-M{r},J{r}))-O{r}"
     )
     # Hipervínculo al PDF en SUSTENTO (nombre del PDF = registro).
-    registro = str(vals.get(_COL_LINK) or "").strip()
+    registro = str(vals.get(_COL_LINK_DET) or "").strip()
     if sp_cfg and registro:
         url = sharepoint.link_factura(
             sp_cfg.get("link_principal"), sp_cfg.get("meses"), registro
         )
         if url:
-            cel = dst.cell(r, _COL_LINK)
+            cel = dst.cell(r, _COL_LINK_DET)
             cel.hyperlink = url
             cel.font = _LINK_FONT
         else:
-            dst.cell(r, _COL_LINK).value = None
+            dst.cell(r, _COL_LINK_DET).value = None
 
 
 _MONEDA_TITULO = {"SOL": "Soles", "USD": "Dólares"}
 
 
+# Operaciones que se rotulan sin moneda aunque en Configuración tengan una.
+_SIN_SUFIJO_MONEDA = {"TRANSFERENCIAS ENTRE CUENTAS"}
+
+
 def _titulo_operacion(pos, texto, moneda) -> str:
     """'Operación N - <texto> - <Soles/Dólares>' según la moneda de la config.
-    No duplica la moneda si el texto ya la incluye."""
+    Sin moneda (una sección que junta soles y dólares) o si la operación está
+    en _SIN_SUFIJO_MONEDA, va sin sufijo. No duplica la moneda si el texto ya
+    la incluye."""
     texto = (texto or "").strip()
     m = str(moneda or "").strip()
     lbl = _MONEDA_TITULO.get(m.upper(), m)
+    if " ".join(texto.split()).upper() in _SIN_SUFIJO_MONEDA:
+        lbl = ""
     partes = [f"Operación {pos}"]
     if texto:
         partes.append(texto)
@@ -592,11 +645,28 @@ def _titulo_operacion(pos, texto, moneda) -> str:
     return " - ".join(partes)
 
 
+def _parejas_por_moneda(posiciones: list, op_texto: dict, op_moneda: dict) -> dict:
+    """Operaciones con el mismo nombre, una en soles y otra en dólares (p. ej.
+    'Pago masivo proveedores'): en el Detalle van en UNA sola sección. Devuelve
+    cada posición -> la de su pareja."""
+    por_nombre: dict[str, list[int]] = {}
+    for pos in posiciones:
+        nombre = " ".join(str(op_texto.get(pos) or "").split()).upper()
+        if nombre:
+            por_nombre.setdefault(nombre, []).append(pos)
+    socio: dict[int, int] = {}
+    for grupo in por_nombre.values():
+        monedas = {str(op_moneda.get(p) or "").strip().upper() for p in grupo}
+        if len(grupo) == 2 and monedas == {"SOL", "USD"}:
+            a, b = grupo
+            socio[a], socio[b] = b, a
+    return socio
+
 # Secciones que no salen de Configuración: título de la plantilla -> nombre con
 # el que se rotulan, ya numeradas junto con las operaciones.
 _NOMBRES_SECCIONES = {
-    "AGENTES DE ADUANAS SOLES": "Agentes de Aduanas - Soles",
-    "AGENTES DE ADUANAS DOLARES": "Agentes de Aduanas - Dólares",
+    "AGENTES DE ADUANAS SOLES": "Agentes de Aduanas",
+    "AGENTES DE ADUANAS DOLARES": "Agentes de Aduanas",
     "PAGOS AL PERSONAL SOLES": "Pagos al personal - Soles",
     "PAGOS ANTICIPADOS": "Pagos anticipados",
 }
@@ -606,14 +676,15 @@ def _clave_titulo(valor) -> str:
     return " ".join(str(valor or "").split()).upper()
 
 
-def _renumerar_titulos(ws, claves: list) -> dict:
+def _renumerar_titulos(ws, total_rows: dict) -> dict:
     """Numera de corrido los títulos del Detalle en el orden en que salen, no
     por su posición en Configuración: las secciones de agentes y las fijas
     también entran en la cuenta. Una fila es un título cuando la de abajo es la
     cabecera 'PROVEEDOR'.
 
-    `claves` son las secciones en ese mismo orden (las de `total_rows`); se
-    devuelve con qué número quedó cada una, para rotular igual el Resumen."""
+    Devuelve con qué número quedó cada clave de `total_rows`, para rotular igual
+    el Resumen. Las claves de una misma sección (la pareja soles/dólares)
+    comparten su fila TOTAL, y por eso comparten número."""
     filas = [
         r
         for r in range(1, ws.max_row)
@@ -628,9 +699,12 @@ def _renumerar_titulos(ws, claves: list) -> dict:
             else _NOMBRES_SECCIONES.get(_clave_titulo(titulo), titulo)
         )
         ws.cell(r, 1).value = f"Operación {n} - {nombre}" if nombre else f"Operación {n}"
+    secciones = sorted(set(total_rows.values()))
     # Si por alguna razón no cuadran, mejor no renumerar el Resumen que rotularlo mal.
-    return dict(zip(claves, range(1, len(filas) + 1))) if len(claves) == len(filas) else {}
-
+    if len(secciones) != len(filas):
+        return {}
+    numero_por_total = {t: n for n, t in enumerate(secciones, start=1)}
+    return {clave: numero_por_total[t] for clave, t in total_rows.items()}
 
 def _construir_detalle_sheet(
     wb, grupos, operaciones, fecha_inicio, fecha_final, sp_cfg,
@@ -638,8 +712,8 @@ def _construir_detalle_sheet(
     ret_cfg=None,
 ) -> dict:
     src = wb["Detalle"]
-    # La plantilla tiene 19 columnas reales (hasta SUSTENTO). La salida tendrá 20
-    # (se inserta RUC en la 2).
+    # La plantilla tiene 19 columnas reales (hasta SUSTENTO). La salida tendrá 21
+    # (RUC en la 2 y el Neto en dos columnas, soles y dólares).
     ncols = 19
     ops = _detectar_operaciones(src)
     agentes = _detectar_agentes(src)
@@ -647,7 +721,6 @@ def _construir_detalle_sheet(
     # y se emiten después de la última operación (ver `emitir_fijas`).
     personal = _rango_seccion(src, _PERSONAL_RE)
     seguros = _rango_seccion(src, _SEGUROS_RE)
-    ultima_op = max(ops.values(), key=lambda v: v[1])[0] if ops else None
     grupos_agentes = grupos_agentes or {}
     nombre_por_oc = nombre_por_oc or {}
     ruc_por_oc = ruc_por_oc or {}
@@ -656,25 +729,89 @@ def _construir_detalle_sheet(
     op_texto = {o["pos"]: o.get("texto", "") for o in operaciones}
     op_moneda = {o["pos"]: o.get("moneda", "") for o in operaciones}
 
+    # Orden en que salen las operaciones: las de la plantilla en su orden y
+    # después las que solo existen en Configuración.
+    plantilla_pos = [pos for _ds, (pos, _tr) in sorted(ops.items())]
+    pos_config = {o["pos"] for o in operaciones} | set(grupos)
+    extras = sorted(p for p in pos_config if p not in plantilla_pos)
+    orden = plantilla_pos + extras
+    # La pareja soles/dólares de una operación sale en el lugar de la primera;
+    # la segunda ya no tiene sección propia.
+    socio = _parejas_por_moneda(orden, op_texto, op_moneda)
+    absorbidas = {p for p, q in socio.items() if orden.index(p) > orden.index(q)}
+    visibles = [v for v in ops.values() if v[0] not in absorbidas]
+    ultima_op = max(visibles, key=lambda v: v[1])[0] if visibles else None
+    # Agentes: una sola sección (la primera de la plantilla) con ambas monedas.
+    agentes_orden = sorted(agentes)
+
+    def titulo_op(pos: int) -> str:
+        """Si la sección junta soles y dólares, el título va sin moneda."""
+        return _titulo_operacion(
+            pos, op_texto.get(pos), None if pos in socio else op_moneda.get(pos)
+        )
+
     dst = wb.create_sheet("__detalle_tmp__")
-    _copiar_anchos(src, dst)
+    _copiar_anchos(src, dst, detalle=True)
     # Anchos fijos para las columnas numéricas (evita "######" en DET, etc.).
     for c, w in _ANCHOS_NUM_DETALLE.items():
         dst.column_dimensions[get_column_letter(c)].width = w
 
     row_map: dict = {}
-    total_rows: dict = {}   # pos -> fila TOTAL (destino) de esa operación
+    total_rows: dict = {}   # clave de sección -> fila TOTAL (destino)
     total_merges: list = []
+
+    def cfd(src_r: int, dst_r: int, **kw) -> None:
+        _copiar_fila_desplazada(src, dst, src_r, dst_r, ncols, detalle=True, **kw)
+
+    def copiar_alto(src_r: int, dst_r: int) -> None:
+        if src.row_dimensions[src_r].height:
+            dst.row_dimensions[dst_r].height = src.row_dimensions[src_r].height
 
     def copiar_fila(src_r: int, dst_r: int) -> int:
         """Copia una fila de la plantilla conservando alto y merges."""
-        _copiar_fila_desplazada(
-            src, dst, src_r, dst_r, ncols, es_cabecera=_es_cabecera(src, src_r)
-        )
-        if src.row_dimensions[src_r].height:
-            dst.row_dimensions[dst_r].height = src.row_dimensions[src_r].height
+        cfd(src_r, dst_r, es_cabecera=_es_cabecera(src, src_r))
+        copiar_alto(src_r, dst_r)
         row_map[src_r] = dst_r
         return dst_r + 1
+
+    def cerrar_total(total_src, dst_r, data_ini, data_fin, claves, refs=None) -> int:
+        """Fila TOTAL con una suma por moneda (Neto S/ y Neto US$). `refs`
+        (moneda -> fórmula) reemplaza la suma de esa moneda."""
+        cfd(total_src, dst_r)
+        copiar_alto(total_src, dst_r)
+        for moneda, col in (("SOL", _COL_NETO_SOL), ("USD", _COL_NETO_USD)):
+            letra = get_column_letter(col)
+            dst.cell(dst_r, col).value = (refs or {}).get(moneda) or (
+                f"=SUM({letra}{data_ini}:{letra}{data_fin})"
+            )
+        total_merges.append(dst_r)
+        for clave in claves:
+            total_rows[clave] = dst_r
+        return dst_r + 1
+
+    def emitir_cuerpo_operacion(pos, modelo, blanco, total_src, dst_r) -> int:
+        """Facturas y TOTAL de una operación, junto con las de su pareja de la
+        otra moneda si la tiene (soles primero y luego dólares, cada grupo por
+        proveedor). Sin facturas, deja las filas en blanco `blanco`."""
+        posiciones = [pos] + ([socio[pos]] if pos in socio else [])
+        filas = sorted(
+            (f for p in posiciones for f in grupos.get(p, [])),
+            key=lambda f: (_col_neto(f.get("MONEDA")) != _COL_NETO_SOL, _key_prov(f)),
+        )
+        data_ini = dst_r
+        alto = src.row_dimensions[modelo].height
+        if filas:
+            for f in filas:
+                _escribir_fila(src, modelo, dst, dst_r, f, ncols, sp_cfg, ret_cfg)
+                if alto:
+                    dst.row_dimensions[dst_r].height = alto
+                dst_r += 1
+        else:
+            for rr in blanco:
+                cfd(rr, dst_r)
+                copiar_alto(rr, dst_r)
+                dst_r += 1
+        return cerrar_total(total_src, dst_r, data_ini, dst_r - 1, posiciones)
 
     def emitir_extras(dst_r: int) -> int:
         """Operaciones de Configuración que la plantilla no tiene (p. ej. una 9ª).
@@ -682,47 +819,24 @@ def _construir_detalle_sheet(
         si no tienen facturas (con sus filas en blanco, como las de la plantilla)."""
         if not ops:
             return dst_r
-        plantilla_pos = {p for p, _tr in ops.values()}
         modelo_ds = max(ops)                      # última operación de la plantilla
         m_total = ops[modelo_ds][1]
-        m_titulo, m_header, m_data = modelo_ds - 2, modelo_ds - 1, modelo_ds
-        alto = src.row_dimensions[m_data].height
-        pos_config = {o["pos"] for o in operaciones} | set(grupos)
-        for pos in sorted(p for p in pos_config if p not in plantilla_pos):
+        m_titulo, m_header = modelo_ds - 2, modelo_ds - 1
+        for pos in extras:
+            if pos in absorbidas:
+                continue
             dst_r += 1  # fila en blanco de separación
-            _copiar_fila_desplazada(src, dst, m_titulo, dst_r, ncols)
-            dst.cell(dst_r, 1).value = _titulo_operacion(
-                pos, op_texto.get(pos), op_moneda.get(pos)
+            cfd(m_titulo, dst_r)
+            dst.cell(dst_r, 1).value = titulo_op(pos)
+            dst_r += 1
+            cfd(m_header, dst_r, es_cabecera=True)
+            dst_r += 1
+            dst_r = emitir_cuerpo_operacion(
+                pos, modelo_ds, range(modelo_ds, m_total), m_total, dst_r
             )
-            dst_r += 1
-            _copiar_fila_desplazada(src, dst, m_header, dst_r, ncols, es_cabecera=True)
-            dst_r += 1
-            data_ini = dst_r
-            filas = sorted(grupos.get(pos, []), key=_key_prov)
-            if filas:
-                for f in filas:
-                    _escribir_fila(src, m_data, dst, dst_r, f, ncols, sp_cfg, ret_cfg)
-                    if alto:
-                        dst.row_dimensions[dst_r].height = alto
-                    dst_r += 1
-            else:
-                # Sin datos: conservar las filas en blanco de la plantilla.
-                for rr in range(m_data, m_total):
-                    _copiar_fila_desplazada(src, dst, rr, dst_r, ncols)
-                    if src.row_dimensions[rr].height:
-                        dst.row_dimensions[dst_r].height = src.row_dimensions[rr].height
-                    dst_r += 1
-            data_fin = dst_r - 1
-            _copiar_fila_desplazada(src, dst, m_total, dst_r, ncols)
-            if src.row_dimensions[m_total].height:
-                dst.row_dimensions[dst_r].height = src.row_dimensions[m_total].height
-            dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{data_fin})"
-            total_merges.append(dst_r)
-            total_rows[pos] = dst_r
-            dst_r += 1
         return dst_r
 
-    def emitir_seccion_fija(sec, nombres, dst_r: int, clave: str,
+    def emitir_seccion_fija(sec, nombres, dst_r: int, claves: list,
                             titulo_texto=None) -> int:
         """Título, cabecera, una fila por nombre (con el estilo de la fila modelo)
         y TOTAL. La lista sale de las constantes, no de la plantilla, así que el
@@ -738,39 +852,45 @@ def _construir_detalle_sheet(
         alto = src.row_dimensions[modelo].height
         data_ini = dst_r
         for nombre in nombres or [None] * _FILAS_EN_BLANCO_SECCION:
-            _copiar_fila_desplazada(src, dst, modelo, dst_r, ncols)
+            cfd(modelo, dst_r)
             dst.cell(dst_r, 1).value = nombre
             if alto:
                 dst.row_dimensions[dst_r].height = alto
             dst_r += 1
-        _copiar_fila_desplazada(src, dst, total_row, dst_r, ncols)
-        if src.row_dimensions[total_row].height:
-            dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
-        dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{dst_r - 1})"
-        total_merges.append(dst_r)
-        # Fila TOTAL de la sección, para referenciarla desde el Resumen.
-        total_rows[clave] = dst_r
-        _aplicar_grid(dst, fila_cabecera, dst_r, _COL_LINK)
-        return dst_r + 1
+        fin = cerrar_total(total_row, dst_r, data_ini, dst_r - 1, claves)
+        _aplicar_grid(dst, fila_cabecera, fin - 1, _COL_LINK_DET)
+        return fin
 
     def emitir_fijas(dst_r: int) -> int:
-        """Emite 'PAGOS AL PERSONAL' y 'PAGOS ANTICIPADOS' (en ese orden)."""
+        """Emite 'PAGOS AL PERSONAL' y 'PAGOS ANTICIPADOS' (en ese orden). Los
+        anticipados pueden ser en soles o en dólares: se enlazan ambos."""
         if personal:
             dst_r = emitir_seccion_fija(
-                personal, _PERSONAL_PROVEEDORES, dst_r, "personal"
+                personal, _PERSONAL_PROVEEDORES, dst_r, ["personal"]
             )
         if seguros:
             dst_r = emitir_seccion_fija(
-                seguros, _ANTICIPADOS_PROVEEDORES, dst_r, "anticipados",
-                _ANTICIPADOS_TITULO,
+                seguros, _ANTICIPADOS_PROVEEDORES, dst_r,
+                ["anticipados_SOL", "anticipados_USD"], _ANTICIPADOS_TITULO,
             )
         return dst_r
 
     dst_r = 1
     src_r = 1
+    # Bloques de la plantilla que no se emiten en su sitio: las secciones fijas
+    # (van al final) y las que se juntan con su pareja de la otra moneda.
     saltar = [
-        r for r in (_rango_a_saltar(src, personal, ncols),
-                    _rango_a_saltar(src, seguros, ncols)) if r
+        r for r in (
+            [_rango_a_saltar(src, personal, ncols), _rango_a_saltar(src, seguros, ncols)]
+            + [
+                _rango_a_saltar(src, (ds - 2, ds, tr), ncols)
+                for ds, (pos, tr) in ops.items() if pos in absorbidas
+            ]
+            + [
+                _rango_a_saltar(src, (ds - 2, ds, agentes[ds][1]), ncols)
+                for ds in agentes_orden[1:]
+            ]
+        ) if r
     ]
     # La plantilla arrastra filas sobrantes después de la última sección (con
     # restos de datos en columnas lejanas): el recorrido se corta ahí.
@@ -782,36 +902,13 @@ def _construir_detalle_sheet(
     )
     while src_r <= fin_util:
         if any(a <= src_r <= b for a, b in saltar):
-            src_r += 1  # esos bloques se emiten más abajo, tras la última operación
+            src_r += 1
             continue
         if src_r in ops:
             pos, total_row = ops[src_r]
-            filas = sorted(grupos.get(pos, []), key=_key_prov)
-            estilo_row = src_r  # fila de datos modelo (estilos)
-            data_ini = dst_r
-            if filas:
-                alto = src.row_dimensions[estilo_row].height
-                for f in filas:
-                    _escribir_fila(src, estilo_row, dst, dst_r, f, ncols, sp_cfg, ret_cfg)
-                    if alto:
-                        dst.row_dimensions[dst_r].height = alto
-                    dst_r += 1
-            else:
-                # Sin datos: conservar las filas en blanco de la plantilla.
-                for rr in range(src_r, total_row):
-                    _copiar_fila_desplazada(src, dst, rr, dst_r, ncols)
-                    if src.row_dimensions[rr].height:
-                        dst.row_dimensions[dst_r].height = src.row_dimensions[rr].height
-                    dst_r += 1
-            data_fin = dst_r - 1
-            # Fila TOTAL (estilo de la plantilla) con Neto (col P) sumado.
-            _copiar_fila_desplazada(src, dst, total_row, dst_r, ncols)
-            if src.row_dimensions[total_row].height:
-                dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
-            dst.cell(dst_r, 16).value = f"=SUM(P{data_ini}:P{data_fin})"
-            total_merges.append(dst_r)
-            total_rows[pos] = dst_r
-            dst_r += 1
+            dst_r = emitir_cuerpo_operacion(
+                pos, src_r, range(src_r, total_row), total_row, dst_r
+            )
             # Tras la última operación de la plantilla van las operaciones extra
             # y, después, las secciones fijas movidas.
             if pos == ultima_op:
@@ -819,69 +916,48 @@ def _construir_detalle_sheet(
                 dst_r = emitir_fijas(dst_r)
             src_r = total_row + 1
         elif src_r in agentes:
-            # Sección 'AGENTES DE ADUANAS SOL/DOL': una fila resumen por O/C
-            # (agente, RUC, N° O/C-O/S y total a depositar) de esa moneda.
-            moneda, total_row = agentes[src_r]
-            estilo_row = src_r
+            # Sección 'AGENTES DE ADUANAS': una fila resumen por O/C (agente,
+            # RUC, N° O/C-O/S y total a depositar), soles primero y luego dólares.
+            _moneda, total_row = agentes[src_r]
             resumen = sorted(
-                ((oc, filas) for (oc, mon), filas in grupos_agentes.items()
-                 if mon == moneda),
-                key=lambda x: x[0],
+                grupos_agentes.items(), key=lambda kv: (kv[0][1] != "SOL", kv[0][0])
             )
             fila_cabecera = dst_r - 1   # ya emitida en la rama de copia verbatim
             data_ini = dst_r
             if resumen:
-                alto = src.row_dimensions[estilo_row].height
-                for oc, filas in resumen:
+                alto = src.row_dimensions[src_r].height
+                for (oc, mon), filas in resumen:
                     total = round(sum(_neto(f, ret_cfg) for f in filas), 2)
                     _escribir_resumen_agente(
-                        src, estilo_row, dst, dst_r,
+                        src, src_r, dst, dst_r,
                         nombre_por_oc.get(oc, ""), ruc_por_oc.get(oc, ""),
-                        oc, total, ncols,
-                        ref_agentes["oc"].get((oc, moneda)),
+                        oc, total, ncols, ref_agentes["oc"].get((oc, mon)), mon,
                     )
                     if alto:
                         dst.row_dimensions[dst_r].height = alto
                     dst_r += 1
             else:
                 for rr in range(src_r, total_row):
-                    _copiar_fila_desplazada(src, dst, rr, dst_r, ncols)
-                    if src.row_dimensions[rr].height:
-                        dst.row_dimensions[dst_r].height = src.row_dimensions[rr].height
+                    cfd(rr, dst_r)
+                    copiar_alto(rr, dst_r)
                     dst_r += 1
-            data_fin = dst_r - 1
-            _copiar_fila_desplazada(src, dst, total_row, dst_r, ncols)
-            if src.row_dimensions[total_row].height:
-                dst.row_dimensions[dst_r].height = src.row_dimensions[total_row].height
-            if resumen:
-                ref_total = ref_agentes["moneda"].get(moneda)
-                # El TOTAL de la sección jala el 'TOTAL <moneda>' del Detalle de
-                # agentes; si no hay referencia, suma las filas resumen locales.
-                dst.cell(dst_r, 16).value = (
-                    _ref_agentes(ref_total) if ref_total
-                    else f"=SUM(P{data_ini}:P{data_fin})"
-                )
-            total_merges.append(dst_r)
-            # Fila TOTAL de la sección, para referenciarla desde el Resumen.
-            total_rows[f"agentes_{moneda}"] = dst_r
-            _aplicar_grid(dst, fila_cabecera, dst_r, _COL_LINK)
-            dst_r += 1
+            # Cada moneda del TOTAL jala el 'TOTAL <moneda>' del Detalle de agentes.
+            refs = {mon: _ref_agentes(fila) for mon, fila in ref_agentes["moneda"].items()}
+            dst_r = cerrar_total(
+                total_row, dst_r, data_ini, dst_r - 1,
+                ["agentes_SOL", "agentes_USD"], refs,
+            )
+            _aplicar_grid(dst, fila_cabecera, dst_r - 1, _COL_LINK_DET)
             src_r = total_row + 1
         else:
-            _copiar_fila_desplazada(
-                src, dst, src_r, dst_r, ncols, es_cabecera=_es_cabecera(src, src_r)
-            )
-            if src.row_dimensions[src_r].height:
-                dst.row_dimensions[dst_r].height = src.row_dimensions[src_r].height
+            cfd(src_r, dst_r, es_cabecera=_es_cabecera(src, src_r))
+            copiar_alto(src_r, dst_r)
             # Si es un título "Operación N", re-rotularlo con el texto actual de
             # la configuración (la plantilla puede tener nombres desactualizados).
             a = src.cell(src_r, 1).value
             m = _OPERACION_RE.match(str(a)) if a else None
             if m:
-                pos = int(m.group(1))
-                dst.cell(dst_r, 1).value = _titulo_operacion(
-                    pos, op_texto.get(pos), op_moneda.get(pos)
-                )
+                dst.cell(dst_r, 1).value = titulo_op(int(m.group(1)))
             row_map[src_r] = dst_r
             dst_r += 1
             src_r += 1
@@ -890,15 +966,15 @@ def _construir_detalle_sheet(
     for mc in list(src.merged_cells.ranges):
         if mc.min_row in row_map and mc.max_row in row_map:
             dst.merge_cells(
-                start_row=row_map[mc.min_row], start_column=_nc(mc.min_col),
-                end_row=row_map[mc.max_row], end_column=_nc(mc.max_col),
+                start_row=row_map[mc.min_row], start_column=_nc_det(mc.min_col),
+                end_row=row_map[mc.max_row], end_column=_nc_det(mc.max_col),
             )
-    # Merges de las filas TOTAL de las secciones Operación/Agentes (A:O).
+    # Merges de las filas TOTAL de las secciones (A:O, hasta antes de los Neto).
     for tr in total_merges:
         dst.merge_cells(start_row=tr, start_column=1, end_row=tr, end_column=15)
 
     # Numeración corrida de todas las secciones, en el orden en que salen.
-    numeros = _renumerar_titulos(dst, list(total_rows))
+    numeros = _renumerar_titulos(dst, total_rows)
 
     # Encabezados que la plantilla deja en blanco en algunas secciones.
     for r in range(1, dst.max_row + 1):
@@ -920,7 +996,6 @@ def _construir_detalle_sheet(
     dst.title = "Detalle"
     wb.move_sheet("Detalle", offset=pos_idx - wb.sheetnames.index("Detalle"))
     return total_rows, numeros
-
 
 # Banda 'ESTADO DE LIQUIDEZ' del Resumen (cabecera + valores) que se mueve al
 # final de la hoja, después de la sección V.
@@ -1200,7 +1275,8 @@ _FILAS_FIJAS_RESUMEN = [
     ("agentes_SOL", "Agentes de Aduanas - Soles", "SOL"),
     ("agentes_USD", "Agentes de Aduanas - Dólares", "USD"),
     ("personal", "Pagos al personal - Soles", "SOL"),
-    ("anticipados", "Pagos anticipados", "SOL"),
+    ("anticipados_SOL", "Pagos anticipados - Soles", "SOL"),
+    ("anticipados_USD", "Pagos anticipados - Dólares", "USD"),
 ]
 _BANCO_POR_DEFECTO = "BCP"
 # Operaciones cuyo banco en 'I. PAGOS A REALIZAR' difiere del de la plantilla.
@@ -1209,19 +1285,30 @@ _BANCO_POR_OPERACION = {6: "BCP", 7: "Interbank"}
 # transferencias entre cuentas propias). Siguen apareciendo en el Detalle. Se
 # reconocen por su nombre y no por su número, porque el orden de las operaciones
 # se puede cambiar desde Configuración.
-_OPERACIONES_FUERA_RESUMEN = {"TRANSFERENCIAS ENTRE CUENTAS - SOLES"}
+_OPERACIONES_FUERA_RESUMEN = {"TRANSFERENCIAS ENTRE CUENTAS"}
+_SUFIJOS_MONEDA = (" - SOLES", " - DÓLARES", " - DOLARES")
 
 
 def _fuera_del_resumen(titulo: str) -> bool:
-    """`titulo` es la etiqueta completa ('Operación N - Texto - Moneda')."""
+    """`titulo` es la etiqueta completa ('Operación N - Texto[ - Moneda]')."""
     t = " ".join(str(titulo or "").split()).upper()
+    for sufijo in _SUFIJOS_MONEDA:
+        if t.endswith(sufijo):
+            t = t[: -len(sufijo)]
+            break
     return any(t.endswith(nombre) for nombre in _OPERACIONES_FUERA_RESUMEN)
+
+
+def _ref_total_detalle(fila: int, moneda) -> str:
+    """Importe de una fila del Resumen: el TOTAL de su sección en el Detalle,
+    en la columna de Neto de esa moneda (P soles, Q dólares)."""
+    return f"=+Detalle!{get_column_letter(_col_neto(moneda))}{fila}"
 # Sección IV (ESTADO DE LIQUIDEZ): cuenta -> qué se paga por ella, con las
 # mismas claves de la sección I (nº de operación o clave de sección fija).
 # 'BCP SOLES' no está: ya apunta al TOTAL SOLES y se actualiza solo.
 _SECCION_LIQUIDEZ = "IV."
 _CUENTAS_LIQUIDEZ = {
-    "BCP DÓLARES": [2, 4, 6, 8, "agentes_USD"],
+    "BCP DÓLARES": [2, 4, 6, 8, "agentes_USD", "anticipados_USD"],
     "INTERBANK DÓLARES": [7],
 }
 
@@ -1380,7 +1467,7 @@ def _agregar_filas_resumen(
         ws.cell(r, 1).value = _BANCO_POR_DEFECTO
         ws.cell(r, 2).value = etiqueta
         ws.cell(r, 3).value = _SIMBOLO_MONEDA.get(moneda, "")
-        ws.cell(r, 4).value = f"=+Detalle!P{total_rows[clave]}"
+        ws.cell(r, 4).value = _ref_total_detalle(total_rows[clave], moneda)
 
     return filas_por_clave
 
@@ -1477,7 +1564,9 @@ def _rellenar_resumen(
             if pos in _BANCO_POR_OPERACION:
                 ws.cell(r, 1).value = _BANCO_POR_OPERACION[pos]
             if pos in total_rows:
-                ws.cell(r, 4).value = f"=+Detalle!P{total_rows[pos]}"
+                ws.cell(r, 4).value = _ref_total_detalle(
+                    total_rows[pos], op_moneda.get(pos)
+                )
 
     # Las filas nuevas van después de las operaciones, así que las de la
     # plantilla no se mueven y sus números siguen valiendo.
