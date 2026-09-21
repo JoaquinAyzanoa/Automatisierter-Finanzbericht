@@ -66,6 +66,15 @@
   border-color: var(--primary-hover);
 }
 
+.informes__download--sec {
+  color: var(--primary);
+  background: var(--surface);
+}
+
+.informes__download--sec:hover {
+  color: var(--primary-contrast);
+}
+
 .informes__downloadIcon {
   display: grid;
   place-items: center;
@@ -158,6 +167,12 @@
   background: var(--surface-muted);
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+
+.informes__msg--ok {
+  color: #1f5f3a;
+  background: #eef8f1;
+  border-color: #c7e6d2;
 }
 
 .informes__grupos {

@@ -614,6 +614,21 @@ export async function vistaPreviaMacros(
   return (await res.json()) as { proceso_id: string; monedas: MacroMoneda[] };
 }
 
+/** Fecha de hoy en formato YYYY-MM-DD. */
+export function fechaHoyISO(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/** Mismo nombre que se venía usando: 'Pago proveedores BCP Soles _150926.xlsm'. */
+export function nombreArchivoMacro(moneda: MonedaMacro, fecha: string): string {
+  const [y, m, d] = fecha.split("-");
+  const etiqueta = moneda === "SOL" ? "Soles" : "Dolares";
+  return `Pago proveedores BCP ${etiqueta} _${d}${m}${y.slice(2)}.xlsm`;
+}
+
 /** `fecha` en formato YYYY-MM-DD. */
 export async function descargarMacro(
   token: string,

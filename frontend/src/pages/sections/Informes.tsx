@@ -2,12 +2,16 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   ApiError,
+  descargarMacro,
+  fechaHoyISO,
   guardarProceso,
   guardarYDescargarProceso,
+  nombreArchivoMacro,
   obtenerAgentesConfig,
   obtenerProceso,
   obtenerProcesoLatest,
   triggerBlobDownload,
+  vistaPreviaMacros,
   type FilaInforme,
   type ProcesoDetalle,
 } from "../../api/client";
@@ -118,6 +122,8 @@ export function Informes({ procesoId }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [descargando, setDescargando] = useState(false);
+  const [generandoMacros, setGenerandoMacros] = useState(false);
+  const [avisoMacros, setAvisoMacros] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
   // Rango de fechas (para el botón Filtrar y para mostrar/guardar en el historial).
   const [fechaInicio, setFechaInicio] = useState("");
@@ -454,6 +460,55 @@ export function Informes({ procesoId }: Props) {
     }
   }
 
+  // Macros de pago masivo del BCP (soles y dólares) del MISMO informe: primero
+  // se guarda lo que está en pantalla, igual que al descargar el informe.
+  async function handleMacros() {
+    if (!token || !data) return;
+    setGenerandoMacros(true);
+    setError(null);
+    setAvisoMacros(null);
+    try {
+      await guardarProceso(token, data.id, {
+        fecha_inicio: fechaInicio || null,
+        fecha_final: fechaFinal || null,
+        tipo_cambio: parseFloat(tipoCambio) || null,
+        overrides,
+      });
+      const { monedas } = await vistaPreviaMacros(token, data.id);
+      const conPagos = monedas.filter((m) => m.abonos.length > 0);
+      if (conPagos.length === 0) {
+        setAvisoMacros("Este informe no tiene pagos masivos.");
+        return;
+      }
+      const sinPlantilla = conPagos.filter((m) =>
+        m.faltan.some((f) => f.includes("plantilla"))
+      );
+      if (sinPlantilla.length > 0) {
+        const cuales = sinPlantilla
+          .map((m) => (m.moneda === "SOL" ? "soles" : "dólares"))
+          .join(" y ");
+        setError(`Falta subir la plantilla de la macro en ${cuales}: súbela en «Pagos masivos».`);
+        return;
+      }
+      const fecha = fechaHoyISO();
+      const partes: string[] = [];
+      for (const m of conPagos) {
+        const blob = await descargarMacro(token, data.id, m.moneda, fecha);
+        triggerBlobDownload(blob, nombreArchivoMacro(m.moneda, fecha));
+        const etiqueta = m.moneda === "SOL" ? "Soles" : "Dólares";
+        const sinCuenta = m.sin_cuenta
+          ? `, ${m.sin_cuenta} sin cuenta en la base (van en blanco para completarla)`
+          : "";
+        partes.push(`${etiqueta}: ${m.abonos.length} proveedores${sinCuenta}`);
+      }
+      setAvisoMacros(`Macros descargadas. ${partes.join(" · ")}.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudieron generar las macros.");
+    } finally {
+      setGenerandoMacros(false);
+    }
+  }
+
   // Operaciones asignables a una fila: de la misma moneda (el ámbito no limita,
   // así un RUC etiquetado puede ir a una operación de otro ámbito).
   function opcionesDeFila(f: FilaInforme) {
@@ -639,6 +694,17 @@ export function Informes({ procesoId }: Props) {
           {descargando ? "Descargando…" : "Descargar"}
         </button>
 
+        <button
+          type="button"
+          className="informes__download informes__download--sec"
+          onClick={handleMacros}
+          disabled={generandoMacros || !hayDatos}
+          title="Macros de pago masivo del BCP (soles y dólares) de este informe"
+        >
+          <span className="informes__downloadIcon">{downloadIcon}</span>
+          {generandoMacros ? "Generando…" : "Macros BCP"}
+        </button>
+
         <div className="informes__dates">
           <label className="informes__field">
             <span>Fecha inicio</span>
@@ -704,6 +770,9 @@ export function Informes({ procesoId }: Props) {
       )}
 
       {error && <div className="informes__msg">{error}</div>}
+      {avisoMacros && (
+        <div className="informes__msg informes__msg--ok">{avisoMacros}</div>
+      )}
 
       {loading ? (
         <div className="informes__msg">Cargando…</div>

@@ -3,8 +3,10 @@ import { useEffect, useState, type ChangeEvent } from "react";
 import {
   ApiError,
   descargarMacro,
+  fechaHoyISO,
   listarArchivosMacro,
   listarProcesos,
+  nombreArchivoMacro,
   subirArchivoMacro,
   triggerBlobDownload,
   vistaPreviaMacros,
@@ -26,20 +28,6 @@ const SLOTS: { prefijo: "plantilla" | "bd"; label: string; accept: string }[] = 
   { prefijo: "plantilla", label: "Plantilla de la macro", accept: ".xlsm" },
   { prefijo: "bd", label: "Base de cuentas", accept: ".xlsx" },
 ];
-
-function hoyISO(): string {
-  const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
-}
-
-/** Mismo nombre que se venía usando: 'Pago proveedores BCP Soles _150926.xlsm'. */
-function nombreMacro(moneda: MonedaMacro, fecha: string): string {
-  const [y, m, d] = fecha.split("-");
-  const etiqueta = moneda === "SOL" ? "Soles" : "Dolares";
-  return `Pago proveedores BCP ${etiqueta} _${d}${m}${y.slice(2)}.xlsm`;
-}
 
 function formatoMonto(v: number): string {
   return v.toLocaleString("es-PE", {
@@ -73,7 +61,7 @@ export function PagosMasivos() {
   const [subiendo, setSubiendo] = useState<TipoArchivoMacro | null>(null);
   const [procesos, setProcesos] = useState<ProcesoResumen[]>([]);
   const [procesoId, setProcesoId] = useState<string>("");
-  const [fecha, setFecha] = useState<string>(hoyISO());
+  const [fecha, setFecha] = useState<string>(fechaHoyISO());
   const [monedas, setMonedas] = useState<MacroMoneda[] | null>(null);
   const [cargando, setCargando] = useState(false);
   const [descargando, setDescargando] = useState<MonedaMacro | null>(null);
@@ -136,7 +124,7 @@ export function PagosMasivos() {
     setError(null);
     try {
       const blob = await descargarMacro(token, procesoId, moneda, fecha);
-      triggerBlobDownload(blob, nombreMacro(moneda, fecha));
+      triggerBlobDownload(blob, nombreArchivoMacro(moneda, fecha));
     } catch (err) {
       setError(mensaje(err, "No se pudo generar la macro."));
     } finally {
