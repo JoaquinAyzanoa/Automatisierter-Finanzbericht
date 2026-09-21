@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session
@@ -24,7 +25,8 @@ def seleccionar_facturas(data: dict, calc: dict) -> dict:
     1. las de 'Pago masivo proveedores', por proveedor como en el informe;
     2. después, los pagos a agentes de aduana: las mismas filas de la sección
        'Agentes de Aduanas' del Detalle, una por O/C con su Neto, y el número de
-       O/C sin guiones como número de documento ('32053-5' -> '320535'). Si la O/C tiene agente identificado se le
+       O/C como número de documento, solo con sus dígitos ('32053-5' -> '320535',
+       '30959-A' -> '30959'). Si la O/C tiene agente identificado se le
        paga al agente (su RUC y su cuenta; varias O/C de un mismo agente van en
        un solo abono). Si no ('Colocar nombre de agente manualmente'), va un
        abono por O/C con el RUC y la cuenta en blanco, para completarlos a mano."""
@@ -54,7 +56,7 @@ def seleccionar_facturas(data: dict, calc: dict) -> dict:
         facturas[moneda].append((
             {
                 "RUC": ruc, "PROVEEDOR": nombre_por_oc.get(oc, ""),
-                "__documento": oc.replace("-", ""),
+                "__documento": re.sub(r"\D", "", oc),
                 "__agente": True,
                 # Sin agente no hay RUC que agrupe: cada O/C va en su abono.
                 "__grupo": None if ruc else f"O/C {oc} {moneda}",

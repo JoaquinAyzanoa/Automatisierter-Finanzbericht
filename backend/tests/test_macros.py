@@ -227,6 +227,7 @@ def test_seleccionar_facturas_suma_agentes_identificados():
             # O/C de un proveedor relacionado sin factura del agente.
             fila("831197135", "NOURYON LLC", "5103572506", 3, oc="31637-4", saldo="90280.99"),
             fila("831197135", "NOURYON LLC", "5103572505", 3, oc="31637-5", saldo="30104.41"),
+            fila("831197135", "NOURYON LLC", "5103572507", 3, oc="30959-A", saldo="10"),
         ],
     }
     calc = detalle_export.preparar_calculo(
@@ -240,6 +241,7 @@ def test_seleccionar_facturas_suma_agentes_identificados():
         ("20213635531", True, 1298.93),  # sus dos O/C en un solo abono
         ("", True, 90280.99),            # sin agente: un abono por O/C
         ("", True, 30104.41),
+        ("", True, 10.0),
     ]
     # Cada O/C es un documento, con el número de O/C sin guion y su Neto
     # (en la 10031696, 394.35 del agente + 50 de la naviera).
@@ -247,6 +249,7 @@ def test_seleccionar_facturas_suma_agentes_identificados():
         ("10031696", 444.35), ("320535", 854.58),
     ]
     assert [d.numero for d in abonos[2].documentos] == ["316374"]
+    assert [d.numero for d in abonos[4].documentos] == ["30959"]   # sin la letra
     assert abonos[2].nombre == "Colocar nombre de agente manualmente"
     assert (abonos[2].cuenta, abonos[2].en_bd) == ("", False)
     assert facturas["SOL"] == []
