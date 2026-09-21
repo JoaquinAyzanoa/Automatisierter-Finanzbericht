@@ -199,9 +199,10 @@ def test_subir_archivos(client):
 
 
 def test_seleccionar_facturas_suma_agentes_identificados():
-    """Pago masivo por proveedor y, después, los pagos a agentes: una O/C con
-    agente se le paga al agente; las O/C sin agente van cada una en su abono,
-    con el total de la O/C y el RUC y la cuenta en blanco."""
+    """Pago masivo por proveedor y, después, los pagos a agentes como en el
+    Detalle: una fila por O/C con su Neto y la O/C como número de documento. Las
+    O/C de un agente van en su abono; las sin agente, cada una en el suyo, con
+    el RUC y la cuenta en blanco."""
     from app.services import detalle_export
     from app.services.macro_service import seleccionar_facturas
 
@@ -222,6 +223,7 @@ def test_seleccionar_facturas_suma_agentes_identificados():
             # O/C con agente: su factura y la de la naviera van al agente.
             fila("20213635531", "DOGANA S.A.", "F003-153142", 2, oc="10031696", saldo="394.35"),
             fila("20492185087", "HAPAG LLOYD", "F001-77", 2, oc="10031696", saldo="50"),
+            fila("20213635531", "DOGANA S.A.", "F003-153160", 2, oc="32053-5", saldo="854.58"),
             # O/C de un proveedor relacionado sin factura del agente.
             fila("831197135", "NOURYON LLC", "5103572506", 3, oc="31637-4", saldo="90280.99"),
             fila("831197135", "NOURYON LLC", "5103572505", 3, oc="31637-5", saldo="30104.41"),
@@ -235,11 +237,16 @@ def test_seleccionar_facturas_suma_agentes_identificados():
     abonos = macro_bcp.armar_abonos(facturas["USD"], {})
     assert [(a.ruc, a.agente, a.total) for a in abonos] == [
         ("20111111111", False, 100.0),
-        ("20213635531", True, 444.35),   # 394.35 del agente + 50 de la naviera
+        ("20213635531", True, 1298.93),  # sus dos O/C en un solo abono
         ("", True, 90280.99),            # sin agente: un abono por O/C
         ("", True, 30104.41),
     ]
-    assert [d.numero for d in abonos[1].documentos] == ["153142", "77"]
-    assert abonos[2].nombre == "Colocar nombre de agente manualmente - O/C 31637-4"
+    # Cada O/C es un documento, con el número de O/C completo y su Neto
+    # (en la 10031696, 394.35 del agente + 50 de la naviera).
+    assert [(d.numero, d.monto) for d in abonos[1].documentos] == [
+        ("10031696", 444.35), ("32053-5", 854.58),
+    ]
+    assert [d.numero for d in abonos[2].documentos] == ["31637-4"]
+    assert abonos[2].nombre == "Colocar nombre de agente manualmente"
     assert (abonos[2].cuenta, abonos[2].en_bd) == ("", False)
     assert facturas["SOL"] == []

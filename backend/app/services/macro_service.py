@@ -22,8 +22,9 @@ def seleccionar_facturas(data: dict, calc: dict) -> dict:
     del informe):
 
     1. las de 'Pago masivo proveedores', por proveedor como en el informe;
-    2. después, los pagos a agentes de aduana, con todas las facturas que el
-       informe consolida en cada O/C. Si la O/C tiene agente identificado se le
+    2. después, los pagos a agentes de aduana: las mismas filas de la sección
+       'Agentes de Aduanas' del Detalle, una por O/C con su Neto, y el número de
+       O/C como número de documento. Si la O/C tiene agente identificado se le
        paga al agente (su RUC y su cuenta; varias O/C de un mismo agente van en
        un solo abono). Si no ('Colocar nombre de agente manualmente'), va un
        abono por O/C con el RUC y la cuenta en blanco, para completarlos a mano."""
@@ -44,30 +45,21 @@ def seleccionar_facturas(data: dict, calc: dict) -> dict:
     }
 
     nombre_por_oc, ruc_por_oc = calc["nombre_por_oc"], calc["ruc_por_oc"]
-    # Primero los agentes identificados (por nombre) y luego las O/C sin agente.
-    grupos = sorted(
-        calc["grupos_agentes"].items(),
-        key=lambda kv: (not ruc_por_oc.get(kv[0][0]), nombre_por_oc.get(kv[0][0], ""), kv[0][0]),
-    )
-    for (oc, mon), filas in grupos:
+    # En el mismo orden que en el Detalle (por O/C).
+    for (oc, mon), filas in sorted(calc["grupos_agentes"].items(), key=lambda kv: kv[0][0]):
         # Igual que en el informe: lo que no es soles va a dólares.
         moneda = "SOL" if str(mon).strip().upper() == "SOL" else "USD"
         ruc = ruc_por_oc.get(oc, "")
-        if ruc:
-            nombre, grupo = nombre_por_oc.get(oc, ""), None
-        else:
-            nombre = f"{nombre_por_oc.get(oc, '')} - O/C {oc}" if oc else (
-                f"{nombre_por_oc.get(oc, '')} - sin O/C"
-            )
-            grupo = f"O/C {oc} {moneda}"
-        facturas[moneda].extend(
-            (
-                {"RUC": ruc, "PROVEEDOR": nombre, "NUMERO": f.get("NUMERO"),
-                 "__agente": True, "__grupo": grupo},
-                detalle_export._neto(f, ret_cfg),
-            )
-            for f in filas
-        )
+        total = round(sum(detalle_export._neto(f, ret_cfg) for f in filas), 2)
+        facturas[moneda].append((
+            {
+                "RUC": ruc, "PROVEEDOR": nombre_por_oc.get(oc, ""), "__documento": oc,
+                "__agente": True,
+                # Sin agente no hay RUC que agrupe: cada O/C va en su abono.
+                "__grupo": None if ruc else f"O/C {oc} {moneda}",
+            },
+            total,
+        ))
     return facturas
 
 
