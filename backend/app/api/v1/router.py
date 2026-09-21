@@ -6,6 +6,7 @@ from app.api.v1.endpoints import (
     finance,
     health,
     informes,
+    macros,
     merge,
     operaciones,
     procesos,
@@ -29,4 +30,5 @@ api_router.include_router(agentes.router)
 api_router.include_router(retencion.router)
 api_router.include_router(informes.router)
 api_router.include_router(procesos.router)
+api_router.include_router(macros.router)
 api_router.include_router(finance.router)

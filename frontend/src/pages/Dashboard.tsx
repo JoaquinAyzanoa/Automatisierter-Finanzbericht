@@ -6,6 +6,7 @@ import { Configuracion } from "./sections/Configuracion";
 import { EntradaInformacion } from "./sections/EntradaInformacion";
 import { Historial } from "./sections/Historial";
 import { Informes } from "./sections/Informes";
+import { PagosMasivos } from "./sections/PagosMasivos";
 import "./Dashboard.css";
 
 const SECTIONS: Record<NavKey, { title: string; body: string }> = {
@@ -16,6 +17,10 @@ const SECTIONS: Record<NavKey, { title: string; body: string }> = {
   informes: {
     title: "Informes",
     body: "Genera, consulta y exporta informes financieros en Excel. Este módulo estará disponible próximamente.",
+  },
+  pagos: {
+    title: "Pagos masivos",
+    body: "Macros de pago masivo del BCP.",
   },
   historial: {
     title: "Historial",
@@ -57,6 +62,8 @@ export function Dashboard() {
             <EntradaInformacion onProcesado={verProceso} />
           ) : active === "informes" ? (
             <Informes procesoId={procesoId} />
+          ) : active === "pagos" ? (
+            <PagosMasivos />
           ) : active === "historial" ? (
             <Historial onVer={verProceso} />
           ) : active === "configuracion" ? (

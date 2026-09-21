@@ -6,6 +6,7 @@ import "./Sidebar.css";
 export type NavKey =
   | "entrada"
   | "informes"
+  | "pagos"
   | "historial"
   | "configuracion"
   | "cuenta";
@@ -45,6 +46,17 @@ const NAV: NavItem[] = [
       <svg {...iconProps}>
         <path d="M4 20V4M4 20h16" />
         <path d="M8 16v-4M12 16V8M16 16v-6" />
+      </svg>
+    ),
+  },
+  {
+    key: "pagos",
+    label: "Pagos masivos",
+    icon: (
+      <svg {...iconProps}>
+        <path d="M3 10l9-6 9 6" />
+        <path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8" />
+        <path d="M3 20h18" />
       </svg>
     ),
   },

@@ -139,24 +139,29 @@ class ProcesoService:
         )
         data = json.loads(proceso.payload)
         output_path = Path(settings.REPORTS_DIR) / DESCARGA_FILENAME
-        sharepoint_cfg = SharepointConfigService(self.db).as_dict()
-        agente_svc = AgenteConfigService(self.db)
-        # Operaciones sin retención según la config ACTUAL (no el snapshot del
-        # proceso), para que el toggle aplique sin reprocesar. Posición = orden.
-        pos_sin_ret = {
-            i + 1
-            for i, op in enumerate(OperacionRepository(self.db).list())
-            if not op.aplica_retencion
-        }
         return detalle_export.construir_detalle(
             data,
             proceso.fecha_inicio,
             proceso.fecha_final,
             output_path,
-            sharepoint_cfg,
-            agente_svc.as_list(),
-            agente_svc.relacionados_list(),
-            RetencionConfigService(self.db).as_dict(),
-            proceso.tipo_cambio,
-            pos_sin_ret,
+            sharepoint_cfg=SharepointConfigService(self.db).as_dict(),
+            tipo_cambio=proceso.tipo_cambio,
+            **self.contexto_calculo(),
         )
+
+    def contexto_calculo(self) -> dict:
+        """Configuración con la que se calcula el Neto de cada factura: agentes de
+        aduana, retención y operaciones sin retención. Se toma la ACTUAL (no la
+        del snapshot del proceso), para que un cambio aplique sin reprocesar."""
+        agente_svc = AgenteConfigService(self.db)
+        return {
+            "agente_rucs": agente_svc.as_list(),
+            "relacionados_rucs": agente_svc.relacionados_list(),
+            "retencion_cfg": RetencionConfigService(self.db).as_dict(),
+            # Posición de la operación = su orden en Configuración.
+            "pos_sin_ret": {
+                i + 1
+                for i, op in enumerate(OperacionRepository(self.db).list())
+                if not op.aplica_retencion
+            },
+        }

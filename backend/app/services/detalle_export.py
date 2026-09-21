@@ -1792,25 +1792,21 @@ def _construir_detalle_agentes_sheet(
     return ref
 
 
-def construir_detalle(
+def preparar_calculo(
     data: dict,
-    fecha_inicio: str | None,
-    fecha_final: str | None,
-    output_path: Path,
-    sharepoint_cfg: dict | None = None,
     agente_rucs: list[str] | None = None,
     relacionados_rucs: list[str] | None = None,
     retencion_cfg: dict | None = None,
     tipo_cambio: float | None = None,
     pos_sin_ret: set | None = None,
-) -> Path:
-    wb = openpyxl.load_workbook(_PLANTILLA)
+) -> dict:
+    """Lo que hace falta para calcular el Neto de cada factura y saber en qué
+    sección va: la config de retención, las facturas por operación (sin las que
+    se consolidan en Agentes de Aduanas) y los grupos de agentes.
 
+    También lo usan las macros de pago masivo, para que sus montos sean
+    exactamente los del informe."""
     tc = float(tipo_cambio) if tipo_cambio else TIPO_CAMBIO_DEFAULT
-    # El mismo tipo de cambio va al Resumen (celda del TOTAL CONSOLIDADO).
-    if "Resumen" in wb.sheetnames:
-        wb["Resumen"][_CELDA_TIPO_CAMBIO] = tc
-
     # Operaciones que NO aplican retención (p. ej. Pagos servicios). Se prefiere
     # el set recibido (config actual); si no, se deriva del snapshot del proceso.
     if pos_sin_ret is None:
@@ -1846,6 +1842,39 @@ def construir_detalle(
         if pos is None:  # "Otros" no va al Excel
             continue
         grupos.setdefault(pos, []).append(f)
+
+    return {
+        "ret_cfg": ret_cfg,
+        "grupos": grupos,
+        "nombre_por_oc": nombre_por_oc,
+        "ruc_por_oc": ruc_por_oc,
+        "grupos_agentes": grupos_agentes,
+    }
+
+
+def construir_detalle(
+    data: dict,
+    fecha_inicio: str | None,
+    fecha_final: str | None,
+    output_path: Path,
+    sharepoint_cfg: dict | None = None,
+    agente_rucs: list[str] | None = None,
+    relacionados_rucs: list[str] | None = None,
+    retencion_cfg: dict | None = None,
+    tipo_cambio: float | None = None,
+    pos_sin_ret: set | None = None,
+) -> Path:
+    wb = openpyxl.load_workbook(_PLANTILLA)
+    calc = preparar_calculo(
+        data, agente_rucs, relacionados_rucs, retencion_cfg, tipo_cambio, pos_sin_ret
+    )
+    ret_cfg, grupos = calc["ret_cfg"], calc["grupos"]
+    nombre_por_oc, ruc_por_oc, grupos_agentes = (
+        calc["nombre_por_oc"], calc["ruc_por_oc"], calc["grupos_agentes"],
+    )
+    # El mismo tipo de cambio va al Resumen (celda del TOTAL CONSOLIDADO).
+    if "Resumen" in wb.sheetnames:
+        wb["Resumen"][_CELDA_TIPO_CAMBIO] = ret_cfg["tipo_cambio"]
 
     operaciones = data.get("operaciones", [])
     # Primero 'Detalle de agentes' (para conocer las filas de sus totales) y

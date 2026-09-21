@@ -535,3 +535,99 @@ export function triggerBlobDownload(blob: Blob, filename: string): void {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+// ---- Macros de pago masivo (BCP) ------------------------------------------
+
+export type MonedaMacro = "SOL" | "USD";
+export type TipoArchivoMacro =
+  | "plantilla_SOL"
+  | "plantilla_USD"
+  | "bd_SOL"
+  | "bd_USD";
+
+export interface ArchivoMacro {
+  tipo: TipoArchivoMacro;
+  nombre: string | null;
+  detalle: string;
+  subido_en: string | null;
+}
+
+export interface AbonoMacro {
+  ruc: string;
+  nombre: string;
+  tipo_cuenta: string;
+  cuenta: string;
+  en_bd: boolean;
+  total: number;
+  documentos: { numero: string; monto: number }[];
+}
+
+export interface MacroMoneda {
+  moneda: MonedaMacro;
+  abonos: AbonoMacro[];
+  total: number;
+  n_documentos: number;
+  sin_cuenta: number;
+  faltan: string[];
+}
+
+export async function listarArchivosMacro(
+  token: string
+): Promise<ArchivoMacro[]> {
+  const res = await fetch(`${BASE}/macros/archivos`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as ArchivoMacro[];
+}
+
+export async function subirArchivoMacro(
+  token: string,
+  tipo: TipoArchivoMacro,
+  archivo: File
+): Promise<ArchivoMacro> {
+  const form = new FormData();
+  form.append("archivo", archivo);
+  const res = await fetch(`${BASE}/macros/archivos/${tipo}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as ArchivoMacro;
+}
+
+export async function vistaPreviaMacros(
+  token: string,
+  procesoId: string
+): Promise<{ proceso_id: string; monedas: MacroMoneda[] }> {
+  const res = await fetch(`${BASE}/macros/procesos/${procesoId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as { proceso_id: string; monedas: MacroMoneda[] };
+}
+
+/** `fecha` en formato YYYY-MM-DD. */
+export async function descargarMacro(
+  token: string,
+  procesoId: string,
+  moneda: MonedaMacro,
+  fecha: string
+): Promise<Blob> {
+  const params = new URLSearchParams({ moneda, fecha });
+  const res = await fetch(
+    `${BASE}/macros/procesos/${procesoId}/descargar?${params}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return await res.blob();
+}

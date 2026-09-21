@@ -1,0 +1,282 @@
+.pagos__error {
+  margin-top: 16px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+}
+
+.pagos__container {
+  margin-top: 24px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+
+.pagos__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pagos__head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pagos__hint {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* ---- Archivos ---- */
+.pagos__archivos {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  padding: 16px 18px 18px;
+}
+
+.pagos__moneda h4,
+.pagos__resHead h4 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.pagos__slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  background: var(--surface);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 8px;
+}
+
+.pagos__slot.is-ok {
+  border-style: solid;
+  border-color: var(--border);
+}
+
+.pagos__slotInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pagos__slotLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pagos__slotNombre {
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pagos__slotMeta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ---- Botones ---- */
+.pagos__btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-contrast);
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.pagos__btn:hover:not(:disabled) {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.pagos__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagos__btn--sec {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+.pagos__btn--sec:hover {
+  background: var(--surface-muted);
+  border-color: var(--primary);
+}
+
+.pagos__btn input {
+  display: none;
+}
+
+/* ---- Generar ---- */
+.pagos__filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px 18px;
+}
+
+.pagos__campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 260px;
+}
+
+.pagos__campo--fecha {
+  flex: 0 0 auto;
+  min-width: 180px;
+}
+
+.pagos__campo span {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.pagos__campo select,
+.pagos__campo input {
+  padding: 9px 12px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.pagos__resultado {
+  margin: 0 18px 18px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.pagos__resHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.pagos__resHead h4 {
+  margin-bottom: 4px;
+}
+
+.pagos__resMeta {
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.pagos__resMeta strong {
+  color: var(--text);
+}
+
+.pagos__aviso {
+  margin-bottom: 10px;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: #7a5b1e;
+  background: #fdf6e7;
+  border: 1px solid #efdcb4;
+  border-radius: 8px;
+}
+
+.pagos__vacio {
+  margin: 0;
+  padding: 6px 18px 18px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.pagos__resultado .pagos__vacio {
+  padding: 0;
+}
+
+.pagos__tablaWrap {
+  overflow-x: auto;
+}
+
+.pagos__tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.pagos__tabla th,
+.pagos__tabla td {
+  padding: 7px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.pagos__tabla th {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+}
+
+.pagos__tabla td:nth-child(5) {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pagos__tabla .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pagos__tabla tr.is-sinCuenta td {
+  background: #fdf6e7;
+}
+
+.pagos__tabla tr.is-sinCuenta td:nth-child(4) {
+  font-weight: 600;
+  color: #7a5b1e;
+}
+
+@media (max-width: 860px) {
+  .pagos__archivos {
+    grid-template-columns: 1fr;
+  }
+}

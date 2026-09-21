@@ -1,0 +1,198 @@
+"""Macros de pago masivo del BCP, con una plantilla y una base de cuentas
+ficticias (misma estructura que las del banco, sin datos reales)."""
+import io
+import zipfile
+from datetime import date
+
+import openpyxl
+import pytest
+from openpyxl.styles import PatternFill
+
+from app.core.security import hash_password
+from app.models.user import User
+from app.services import macro_bcp
+from app.services.excel_utils import ProcesamientoError
+
+AMARILLO = "FFFFFF00"
+FILA_CHEQUE = 20
+
+
+def _plantilla(restos: bool = False) -> bytes:
+    """Una .xlsm mínima: hoja de abonos con la fila 7, las filas modelo 11 (A,
+    amarilla) y 12 (D), la sección de cheques en la 20, la macro y un botón."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = macro_bcp.HOJA_INPUT
+    ws["A6"], ws["B6"] = "Tipo de Registro", "Cantidad de abonos de la planilla"
+    ws["A7"], ws["D7"], ws["E7"], ws["G7"] = "C", "C", "1930000000026", "Referencia PaP"
+    for c in range(1, 16):
+        ws.cell(11, c).fill = PatternFill("solid", fgColor=AMARILLO)
+        ws.cell(11, c).number_format = "@"
+        ws.cell(12, c).number_format = "@"
+    if restos:  # datos de una semana anterior
+        ws["A15"], ws["G15"], ws["I15"] = "A", "PROVEEDOR VIEJO", "999.99"
+    ws.cell(FILA_CHEQUE, 1).value = "DATOS DEL ABONO\nCON CHEQUE DE GERENCIA"
+    ws.cell(FILA_CHEQUE + 1, 1).value = "Tipo de Registro"
+    wb.create_sheet("Hoja1")["A1"] = "5173.97"
+    buf = io.BytesIO()
+    wb.save(buf)
+    # openpyxl no escribe macros ni botones: se agregan al zip a mano.
+    salida = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as zin, \
+            zipfile.ZipFile(salida, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            zout.writestr(item, zin.read(item.filename))
+        zout.writestr("xl/vbaProject.bin", b"macro del banco")
+        zout.writestr("xl/ctrlProps/ctrlProp1.xml", b"<formControlPr/>")
+    return salida.getvalue()
+
+
+def _base(cabecera_ok: bool = True) -> bytes:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append([
+        "Tipo de Registro", "Tipo de Cuenta de Abono",
+        "Cuenta de Abono" if cabecera_ok else "Otra cosa",
+        "Tipo de Documento de Identidad", "Número de Documento de Identidad",
+        "Correlativo", "Nombre del proveedor",
+    ])
+    ws.append(["A", "C", "1910000000011", "6", "20111111111", "   ", "PROVEEDOR UNO SAC"])
+    # RUC guardado como número: debe normalizarse igual.
+    ws.append(["A", "B", "00219300000000000022", 6, 20222222222.0, None, "PROVEEDOR DOS SA"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def _hoja(contenido: bytes):
+    return openpyxl.load_workbook(io.BytesIO(contenido))[macro_bcp.HOJA_INPUT]
+
+
+def _factura(ruc, numero, proveedor="DEL INFORME"):
+    return {"RUC": ruc, "NUMERO": numero, "PROVEEDOR": proveedor}
+
+
+@pytest.mark.parametrize("numero, esperado", [
+    ("F002-00012369", "12369"),
+    ("E001-6", "6"),
+    ("FF2A-00173430", "173430"),
+    ("F001-000", "0"),
+    ("SIN-NUMERO", "NUMERO"),
+])
+def test_numero_documento(numero, esperado):
+    assert macro_bcp.numero_documento(numero) == esperado
+
+
+def test_leer_base_cuentas():
+    cuentas = macro_bcp.leer_base_cuentas(_base())
+    assert cuentas["20111111111"] == {
+        "tipo_cuenta": "C", "cuenta": "1910000000011", "tipo_doc": "6",
+        "nombre": "PROVEEDOR UNO SAC",
+    }
+    assert cuentas["20222222222"]["tipo_doc"] == "6"
+    with pytest.raises(ProcesamientoError):
+        macro_bcp.leer_base_cuentas(_base(cabecera_ok=False))
+
+
+def test_armar_abonos_agrupa_por_ruc_y_cruza_la_base():
+    cuentas = macro_bcp.leer_base_cuentas(_base())
+    abonos = macro_bcp.armar_abonos(
+        [
+            (_factura("20111111111", "F001-00000010"), 100.004),
+            (_factura("20999999999", "E001-7", "SIN CUENTA SAC"), 50),
+            (_factura("20111111111", "F001-00000011"), 200.555),
+        ],
+        cuentas,
+    )
+    uno, sin = abonos
+    # Nombre de la base, facturas redondeadas a 2 decimales y luego sumadas.
+    assert (uno.nombre, uno.cuenta, uno.total) == ("PROVEEDOR UNO SAC", "1910000000011", 300.56)
+    assert [d.numero for d in uno.documentos] == ["10", "11"]
+    # Sin cuenta: va igual, con el nombre del informe y la cuenta en blanco.
+    assert (sin.en_bd, sin.nombre, sin.cuenta) == (False, "SIN CUENTA SAC", "")
+
+
+def test_generar_macro_llena_y_deja_lo_demas_intacto():
+    plantilla = _plantilla()
+    abonos = macro_bcp.armar_abonos(
+        [
+            (_factura("20111111111", "F001-00000010"), 1000),
+            (_factura("20111111111", "F001-00000011"), 234.5),
+            (_factura("20999999999", "E001-7", "SIN CUENTA SAC"), 50),
+        ],
+        macro_bcp.leer_base_cuentas(_base()),
+    )
+    salida = macro_bcp.generar_macro(plantilla, abonos, "USD", date(2026, 9, 15))
+    ws = _hoja(salida)
+
+    assert (ws["B7"].value, ws["C7"].value, ws["F7"].value) == ("000002", "20260915", "1284.50")
+    assert ws["E7"].value == "1930000000026"          # cuenta de cargo: la de la plantilla
+    fila = lambda r: [ws.cell(r, c).value for c in range(1, 16)]
+    assert fila(11) == [
+        "A", "C", "1910000000011", "6", "20111111111 ", "   ", "PROVEEDOR UNO SAC",
+        "D", "1234.50", "S", "0002", None, None, None, None,
+    ]
+    assert fila(12)[0] == "D" and fila(12)[11:] == ["F ", "10", "D", "1000.00"]
+    assert fila(13)[11:] == ["F ", "11", "D", "234.50"]
+    assert fila(14)[:9] == ["A", None, None, "6", "20999999999 ", "   ", "SIN CUENTA SAC", "D", "50.00"]
+    # Las filas de abono llevan el formato de la fila 11 de la plantilla.
+    assert ws.cell(11, 1).fill.fgColor.rgb == ws.cell(14, 1).fill.fgColor.rgb == AMARILLO
+    assert ws.cell(12, 1).fill.fgColor.rgb != AMARILLO
+    # La sección de cheques sigue en su sitio.
+    assert "CHEQUE" in ws.cell(FILA_CHEQUE, 1).value
+
+    zt, zs = zipfile.ZipFile(io.BytesIO(plantilla)), zipfile.ZipFile(io.BytesIO(salida))
+    cambiadas = [n for n in zt.namelist() if zt.read(n) != zs.read(n)]
+    assert cambiadas == ["xl/worksheets/sheet1.xml"]   # macro y botón, intactos
+
+
+def test_generar_macro_limpia_restos_de_otra_semana():
+    abonos = macro_bcp.armar_abonos(
+        [(_factura("20111111111", "F001-1"), 10)], macro_bcp.leer_base_cuentas(_base())
+    )
+    ws = _hoja(macro_bcp.generar_macro(_plantilla(restos=True), abonos, "SOL", date(2026, 9, 15)))
+    assert ws["A15"].value is None and ws["G15"].value is None
+
+
+def test_generar_macro_sin_espacio_suficiente():
+    abonos = macro_bcp.armar_abonos(
+        [(_factura(f"20{i:09d}", f"F001-{i}"), 1) for i in range(10)], {}
+    )
+    with pytest.raises(ProcesamientoError, match="solo admite"):
+        macro_bcp.generar_macro(_plantilla(), abonos, "SOL", date(2026, 9, 15))
+
+
+def test_plantilla_sin_macro_rechazada():
+    with pytest.raises(ProcesamientoError, match="xlsm"):
+        macro_bcp.validar_plantilla(_base())
+
+
+def _auth_headers(client) -> dict:
+    from app.api.deps import get_db
+
+    gen = client.app.dependency_overrides[get_db]()
+    db = next(gen)
+    db.add(User(username="tester", hashed_password=hash_password("s3cret"), is_admin=True))
+    db.commit()
+    try:
+        next(gen)
+    except StopIteration:
+        pass
+    resp = client.post("/api/v1/auth/login", json={"username": "tester", "password": "s3cret"})
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+def test_subir_archivos(client):
+    headers = _auth_headers(client)
+    url = "/api/v1/macros/archivos"
+    assert [a["nombre"] for a in client.get(url, headers=headers).json()] == [None] * 4
+
+    r = client.post(f"{url}/plantilla_SOL", headers=headers, files={"archivo": ("m.xlsm", _plantilla())})
+    assert r.status_code == 200 and r.json()["detalle"] == f"admite {FILA_CHEQUE - 11} filas"
+    r = client.post(f"{url}/bd_SOL", headers=headers, files={"archivo": ("bd.xlsx", _base())})
+    assert r.status_code == 200 and r.json()["detalle"] == "2 cuentas"
+    # Una base donde va la plantilla se rechaza con un mensaje claro.
+    r = client.post(f"{url}/plantilla_USD", headers=headers, files={"archivo": ("bd.xlsx", _base())})
+    assert r.status_code == 422
+    r = client.post(f"{url}/otro", headers=headers, files={"archivo": ("x", b"x")})
+    assert r.status_code == 422
