@@ -239,17 +239,17 @@ def test_seleccionar_facturas_suma_agentes_identificados():
     assert [(a.ruc, a.agente, a.total) for a in abonos] == [
         ("20111111111", False, 100.0),
         ("20213635531", True, 1298.93),  # sus dos O/C en un solo abono
-        ("", True, 90280.99),            # sin agente: un abono por O/C
+        ("", True, 10.0),                # sin agente: un abono por O/C,
+        ("", True, 90280.99),            # en el orden de las O/C del Detalle
         ("", True, 30104.41),
-        ("", True, 10.0),
     ]
-    # Cada O/C es un documento, con el número de O/C sin guion y su Neto
+    # Cada O/C es un documento, con solo los dígitos de la O/C y su Neto
     # (en la 10031696, 394.35 del agente + 50 de la naviera).
     assert [(d.numero, d.monto) for d in abonos[1].documentos] == [
         ("10031696", 444.35), ("320535", 854.58),
     ]
-    assert [d.numero for d in abonos[2].documentos] == ["316374"]
-    assert [d.numero for d in abonos[4].documentos] == ["30959"]   # sin la letra
-    assert abonos[2].nombre == "Colocar nombre de agente manualmente"
-    assert (abonos[2].cuenta, abonos[2].en_bd) == ("", False)
+    assert [d.numero for d in abonos[2].documentos] == ["30959"]   # sin la letra
+    assert [d.numero for d in abonos[3].documentos] == ["316374"]
+    assert abonos[3].nombre == "Colocar nombre de agente manualmente"
+    assert (abonos[3].cuenta, abonos[3].en_bd) == ("", False)
     assert facturas["SOL"] == []
