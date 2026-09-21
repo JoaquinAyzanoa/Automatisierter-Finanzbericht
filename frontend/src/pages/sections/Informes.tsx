@@ -692,27 +692,6 @@ export function Informes({ procesoId }: Props) {
           />
         </div>
 
-        <button
-          type="button"
-          className="informes__download"
-          onClick={handleDescargar}
-          disabled={descargando || !hayDatos}
-        >
-          <span className="informes__downloadIcon">{downloadIcon}</span>
-          {descargando ? "Descargando…" : "Descargar"}
-        </button>
-
-        <button
-          type="button"
-          className="informes__download informes__download--sec"
-          onClick={handleMacros}
-          disabled={generandoMacros || !hayDatos}
-          title="Macros de pago masivo del BCP (soles y dólares) de este informe, con los pagos a agentes de aduana"
-        >
-          <span className="informes__downloadIcon">{downloadIcon}</span>
-          {generandoMacros ? "Generando…" : "Macros BCP"}
-        </button>
-
         <div className="informes__dates">
           <label className="informes__field">
             <span>Fecha inicio</span>
@@ -755,6 +734,30 @@ export function Informes({ procesoId }: Props) {
         >
           Filtrar
         </button>
+
+        {/* Descargas en su propia fila, a la derecha, para dejarle espacio al buscador. */}
+        <div className="informes__acciones">
+          <button
+            type="button"
+            className="informes__download"
+            onClick={handleDescargar}
+            disabled={descargando || !hayDatos}
+          >
+            <span className="informes__downloadIcon">{downloadIcon}</span>
+            {descargando ? "Descargando…" : "Descargar"}
+          </button>
+
+          <button
+            type="button"
+            className="informes__download informes__download--sec"
+            onClick={handleMacros}
+            disabled={generandoMacros || !hayDatos}
+            title="Macros de pago masivo del BCP (soles y dólares) de este informe, con los pagos a agentes de aduana"
+          >
+            <span className="informes__downloadIcon">{downloadIcon}</span>
+            {generandoMacros ? "Generando…" : "Macros BCP"}
+          </button>
+        </div>
       </div>
 
       {data && (

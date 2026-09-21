@@ -1,14 +1,22 @@
 .informes__toolbar {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 12px;
+}
+
+/* Segunda fila de la barra: los botones de descarga, alineados a la derecha. */
+.informes__acciones {
+  flex: 1 1 100%;
+  display: flex;
+  justify-content: flex-end;
   gap: 12px;
 }
 
 .informes__search {
   position: relative;
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 220px;
   display: flex;
   align-items: center;
 }
