@@ -649,6 +649,17 @@ def _titulo_operacion(pos, texto, moneda) -> str:
     return " - ".join(partes)
 
 
+# Operaciones que en el Detalle van al final, después de las secciones fijas
+# (Pagos al personal y Pagos anticipados). Se reconocen por su nombre, no por su
+# número, y salen en el orden de Configuración.
+_OPERACIONES_AL_FINAL = ("MATERIA PRIMA",)
+
+
+def _va_al_final(texto) -> bool:
+    t = " ".join(str(texto or "").split()).upper()
+    return any(nombre in t for nombre in _OPERACIONES_AL_FINAL)
+
+
 def _parejas_por_moneda(posiciones: list, op_texto: dict, op_moneda: dict) -> dict:
     """Operaciones con el mismo nombre, una en soles y otra en dólares (p. ej.
     'Pago masivo proveedores'): en el Detalle van en UNA sola sección. Devuelve
@@ -743,7 +754,10 @@ def _construir_detalle_sheet(
     # la segunda ya no tiene sección propia.
     socio = _parejas_por_moneda(orden, op_texto, op_moneda)
     absorbidas = {p for p, q in socio.items() if orden.index(p) > orden.index(q)}
-    visibles = [v for v in ops.values() if v[0] not in absorbidas]
+    # Las de Materia Prima no salen en su sitio: van después de las fijas.
+    al_final = [p for p in orden if p not in absorbidas and _va_al_final(op_texto.get(p))]
+    ds_por_pos = {pos: ds for ds, (pos, _tr) in ops.items()}
+    visibles = [v for v in ops.values() if v[0] not in absorbidas and v[0] not in al_final]
     ultima_op = max(visibles, key=lambda v: v[1])[0] if visibles else None
     # Agentes: una sola sección (la primera de la plantilla) con ambas monedas.
     agentes_orden = sorted(agentes)
@@ -827,7 +841,7 @@ def _construir_detalle_sheet(
         m_total = ops[modelo_ds][1]
         m_titulo, m_header = modelo_ds - 2, modelo_ds - 1
         for pos in extras:
-            if pos in absorbidas:
+            if pos in absorbidas or pos in al_final:
                 continue
             dst_r += 1  # fila en blanco de separación
             cfd(m_titulo, dst_r)
@@ -838,6 +852,26 @@ def _construir_detalle_sheet(
             dst_r = emitir_cuerpo_operacion(
                 pos, modelo_ds, range(modelo_ds, m_total), m_total, dst_r
             )
+        return dst_r
+
+    def emitir_al_final(dst_r: int) -> int:
+        """Las operaciones de `al_final` (Materia Prima), después de las fijas.
+        Las de la plantilla salen con sus propias filas; las que solo existen en
+        Configuración, con el estilo de la última operación de la plantilla."""
+        for pos in al_final:
+            ds = ds_por_pos.get(pos, max(ops) if ops else None)
+            if ds is None:
+                continue
+            total_src = ops[ds][1]
+            dst_r += 1  # fila en blanco de separación
+            cfd(ds - 2, dst_r)                          # título
+            copiar_alto(ds - 2, dst_r)
+            dst.cell(dst_r, 1).value = titulo_op(pos)
+            dst_r += 1
+            cfd(ds - 1, dst_r, es_cabecera=True)       # cabecera
+            copiar_alto(ds - 1, dst_r)
+            dst_r += 1
+            dst_r = emitir_cuerpo_operacion(pos, ds, range(ds, total_src), total_src, dst_r)
         return dst_r
 
     def emitir_seccion_fija(sec, nombres, dst_r: int, claves: list,
@@ -881,14 +915,15 @@ def _construir_detalle_sheet(
 
     dst_r = 1
     src_r = 1
-    # Bloques de la plantilla que no se emiten en su sitio: las secciones fijas
-    # (van al final) y las que se juntan con su pareja de la otra moneda.
+    # Bloques de la plantilla que no se emiten en su sitio: las secciones fijas y
+    # las de Materia Prima (van al final) y las que se juntan con su pareja de la
+    # otra moneda.
     saltar = [
         r for r in (
             [_rango_a_saltar(src, personal, ncols), _rango_a_saltar(src, seguros, ncols)]
             + [
                 _rango_a_saltar(src, (ds - 2, ds, tr), ncols)
-                for ds, (pos, tr) in ops.items() if pos in absorbidas
+                for ds, (pos, tr) in ops.items() if pos in absorbidas or pos in al_final
             ]
             + [
                 _rango_a_saltar(src, (ds - 2, ds, agentes[ds][1]), ncols)
@@ -913,11 +948,12 @@ def _construir_detalle_sheet(
             dst_r = emitir_cuerpo_operacion(
                 pos, src_r, range(src_r, total_row), total_row, dst_r
             )
-            # Tras la última operación de la plantilla van las operaciones extra
-            # y, después, las secciones fijas movidas.
+            # Tras la última operación de la plantilla van las operaciones extra,
+            # las secciones fijas movidas y, al final, las de Materia Prima.
             if pos == ultima_op:
                 dst_r = emitir_extras(dst_r)
                 dst_r = emitir_fijas(dst_r)
+                dst_r = emitir_al_final(dst_r)
             src_r = total_row + 1
         elif src_r in agentes:
             # Sección 'AGENTES DE ADUANAS': una fila resumen por O/C (agente,
@@ -954,6 +990,11 @@ def _construir_detalle_sheet(
             _aplicar_grid(dst, fila_cabecera, dst_r - 1, _COL_LINK_DET)
             src_r = total_row + 1
         else:
+            # Cada título de sección va separado de lo anterior por una fila en
+            # blanco: al saltar una sección absorbida se va también la suya.
+            es_titulo = _es_cabecera(src, src_r + 1)
+            if es_titulo and dst_r > 1 and not _fila_vacia(dst, dst_r - 1, _COL_LINK_DET):
+                dst_r += 1
             cfd(src_r, dst_r, es_cabecera=_es_cabecera(src, src_r))
             copiar_alto(src_r, dst_r)
             # Si es un título "Operación N", re-rotularlo con el texto actual de
