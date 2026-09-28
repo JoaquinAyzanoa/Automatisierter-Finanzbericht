@@ -97,6 +97,13 @@
   white-space: nowrap;
 }
 
+.sidebar__abajo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px 12px;
+}
+
 .sidebar__footer {
   display: flex;
   flex-direction: column;

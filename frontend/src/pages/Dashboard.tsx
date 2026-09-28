@@ -9,9 +9,8 @@ import { Informes } from "./sections/Informes";
 import { PagosMasivos } from "./sections/PagosMasivos";
 import "./Dashboard.css";
 
-/** Datos de contacto que se muestran en «Acerca de» y en el pie de página. */
+/** Datos de contacto que se muestran en «Acerca de». */
 export const DESARROLLADORA = {
-  autora: "AngieAyzanoa",
   nombre: "Angie Ayzanoa",
   correo: "betsayzanoa@gmail.com",
 };
@@ -126,9 +125,7 @@ export function Dashboard() {
         </main>
 
         <footer className="app__footer">
-          <span>
-            {DESARROLLADORA.autora} · Automatización de Informes Financieros
-          </span>
+          <span>Automatización de Informes Financieros</span>
           <span className="app__footerSep">·</span>
           <button
             type="button"
@@ -137,8 +134,6 @@ export function Dashboard() {
           >
             Acerca de
           </button>
-          <span className="app__footerSep">·</span>
-          <a href={`mailto:${DESARROLLADORA.correo}`}>{DESARROLLADORA.correo}</a>
         </footer>
       </div>
     </div>
