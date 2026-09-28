@@ -37,7 +37,7 @@ export function Login() {
         <div className="login__brandTop">
           <span className="login__monogram">AF</span>
           <span className="login__brandName">
-            Automatización de Informes Financieros
+            Automatización de informe de pago a proveedores
           </span>
         </div>
 
@@ -59,7 +59,7 @@ export function Login() {
         <div className="login__card">
           <div className="login__mobileBrand">
             <span className="login__monogram login__monogram--sm">AF</span>
-            <span>Automatización de Informes Financieros</span>
+            <span>Automatización de informe de pago a proveedores</span>
           </div>
 
           <div className="login__header">

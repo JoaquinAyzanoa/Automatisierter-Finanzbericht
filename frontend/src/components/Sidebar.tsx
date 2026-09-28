@@ -113,7 +113,7 @@ export function Sidebar({ active, onSelect }: SidebarProps) {
       <div className="sidebar__brand">
         <span className="sidebar__monogram">AF</span>
         <span className="sidebar__brandName">
-          Automatización de Informes Financieros
+          Automatización de informe de pago a proveedores
         </span>
       </div>
 

@@ -81,7 +81,7 @@ export function Dashboard() {
           ) : active === "acerca" ? (
             <section className="panel">
               <p className="panel__lead">
-                Automatización de Informes Financieros: genera el informe
+                Automatización de informe de pago a proveedores: genera el informe
                 semanal de pagos a proveedores y las macros de pago masivo del
                 banco a partir de los archivos de origen.
               </p>
@@ -125,7 +125,7 @@ export function Dashboard() {
         </main>
 
         <footer className="app__footer">
-          <span>Automatización de Informes Financieros</span>
+          <span>Automatización de informe de pago a proveedores</span>
           <span className="app__footerSep">·</span>
           <button
             type="button"
