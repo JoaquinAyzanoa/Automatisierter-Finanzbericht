@@ -9,6 +9,7 @@ export type NavKey =
   | "pagos"
   | "historial"
   | "configuracion"
+  | "acerca"
   | "cuenta";
 
 interface NavItem {
@@ -84,6 +85,17 @@ const NAV: NavItem[] = [
   },
 ];
 
+const NAV_ACERCA: NavItem = {
+  key: "acerca",
+  label: "Acerca de",
+  icon: (
+    <svg {...iconProps}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 8h.01" />
+    </svg>
+  ),
+};
+
 const accountIcon = (
   <svg {...iconProps}>
     <circle cx="12" cy="8" r="4" />
@@ -116,7 +128,7 @@ export function Sidebar({ active, onSelect }: SidebarProps) {
       </div>
 
       <nav className="sidebar__nav">
-        {NAV.map((item) => (
+        {[...NAV, NAV_ACERCA].map((item) => (
           <button
             key={item.key}
             type="button"

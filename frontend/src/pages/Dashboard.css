@@ -34,6 +34,40 @@
   padding: 32px;
 }
 
+.app__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 32px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.app__footer a,
+.app__footerLink {
+  padding: 0;
+  font-size: inherit;
+  font-family: inherit;
+  color: var(--primary);
+  background: none;
+  border: none;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.app__footer a:hover,
+.app__footerLink:hover {
+  text-decoration: underline;
+}
+
+.app__footerSep {
+  color: var(--border-strong);
+}
+
 .panel {
   max-width: 900px;
   margin: 0 auto;
