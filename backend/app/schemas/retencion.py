@@ -13,7 +13,11 @@ class RetencionConfigSchema(BaseModel):
 
 
 class RucsImportados(BaseModel):
-    """RUCs leídos de un archivo, para agregarlos a la lista."""
+    """RUCs leídos de un archivo, para agregarlos a la lista, y lo que quedó
+    fuera (para cuadrar el total con el archivo)."""
 
     rucs: list[str]
-    descartados: int
+    # Veces que un RUC venía repetido en el archivo.
+    repetidos: int = 0
+    # Números que no son un RUC de 11 dígitos.
+    invalidos: list[str] = []

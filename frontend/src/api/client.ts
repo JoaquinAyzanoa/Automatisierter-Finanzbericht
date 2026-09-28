@@ -391,10 +391,18 @@ export async function guardarRetencionConfig(
 }
 
 /** Lee los RUC de un Excel o CSV. No guarda: solo devuelve lo que encontró. */
+export interface RucsImportados {
+  rucs: string[];
+  /** Veces que un RUC venía repetido en el archivo. */
+  repetidos: number;
+  /** Números del archivo que no son un RUC de 11 dígitos. */
+  invalidos: string[];
+}
+
 export async function importarRucsRetencion(
   token: string,
   archivo: File
-): Promise<{ rucs: string[]; descartados: number }> {
+): Promise<RucsImportados> {
   const form = new FormData();
   form.append("archivo", archivo);
   const res = await fetch(`${BASE}/retencion/rucs/importar`, {
@@ -405,7 +413,7 @@ export async function importarRucsRetencion(
   if (!res.ok) {
     throw new ApiError(res.status, await parseError(res));
   }
-  return (await res.json()) as { rucs: string[]; descartados: number };
+  return (await res.json()) as RucsImportados;
 }
 
 // ---- Procesos / Historial -------------------------------------------------

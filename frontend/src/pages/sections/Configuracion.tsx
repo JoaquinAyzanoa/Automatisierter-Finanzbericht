@@ -177,23 +177,31 @@ export function Configuracion() {
     marcarRet();
   }
 
-  /** Agrega varios RUC a la vez, sin repetir los que ya están. */
-  function agregarRucs(lista: string[], descartados: number) {
+  /** Agrega varios RUC a la vez y explica qué pasó con cada uno, para poder
+   *  cuadrar el total con el archivo o la lista pegada. */
+  function agregarRucs(lista: string[], repetidos: number, invalidos: string[]) {
     const nuevos: string[] = [];
-    let repetidos = 0;
+    let yaEstaban = 0;
+    let repetidosEnLista = repetidos;
     for (const ruc of lista) {
-      if (retRucs.includes(ruc) || nuevos.includes(ruc)) repetidos += 1;
+      if (nuevos.includes(ruc)) repetidosEnLista += 1;
+      else if (retRucs.includes(ruc)) yaEstaban += 1;
       else nuevos.push(ruc);
     }
     if (nuevos.length) {
       setRetRucs((prev) => [...prev, ...nuevos]);
       marcarRet();
     }
+    const muestra = invalidos.slice(0, 5).join(", ");
     setRetAviso(
       [
         `${nuevos.length} agregados`,
-        repetidos ? `${repetidos} ya estaban` : "",
-        descartados ? `${descartados} descartados (no son RUC de 11 dígitos)` : "",
+        yaEstaban ? `${yaEstaban} ya estaban en la lista` : "",
+        repetidosEnLista ? `${repetidosEnLista} repetidos en el archivo` : "",
+        invalidos.length
+          ? `${invalidos.length} no son RUC de 11 dígitos (${muestra}` +
+            (invalidos.length > 5 ? ", …)" : ")")
+          : "",
       ]
         .filter(Boolean)
         .join(" · ")
@@ -203,9 +211,12 @@ export function Configuracion() {
   /** Los RUC pegados a mano (una columna de Excel, comas, espacios…). */
   function agregarRetLista() {
     const numeros = retPegado.split(/\D+/).filter(Boolean);
-    const validos = numeros.filter((n) => n.length === 11);
     setRetPegado("");
-    agregarRucs(validos, numeros.length - validos.length);
+    agregarRucs(
+      numeros.filter((n) => n.length === 11),
+      0,
+      numeros.filter((n) => n.length !== 11)
+    );
   }
 
   /** Los RUC de un Excel o CSV: los lee el servidor y los agrega a la lista. */
@@ -215,8 +226,8 @@ export function Configuracion() {
     if (!archivo || !token) return;
     setRetAviso("Leyendo el archivo…");
     try {
-      const { rucs, descartados } = await importarRucsRetencion(token, archivo);
-      agregarRucs(rucs, descartados);
+      const { rucs, repetidos, invalidos } = await importarRucsRetencion(token, archivo);
+      agregarRucs(rucs, repetidos, invalidos);
     } catch (err) {
       setRetAviso(null);
       setError(

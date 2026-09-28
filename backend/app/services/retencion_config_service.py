@@ -13,10 +13,14 @@ DEFAULT_TIPO_CAMBIO = 3.75
 _RUC_RE = re.compile(r"\b\d{11}\b")
 
 
-def extraer_rucs(contenido: bytes, nombre: str) -> tuple[list[str], int]:
+def extraer_rucs(contenido: bytes, nombre: str) -> dict:
     """RUCs de un archivo (.xlsx o texto/CSV), sin repetir y en el orden en que
     aparecen. Se buscan en todas las celdas, así no importa en qué columna
-    estén. Devuelve también cuántos valores se descartaron por no ser RUC."""
+    estén. Además del listado se informa qué quedó fuera, para cuadrar el total
+    con el archivo:
+      - `repetidos`: RUCs que aparecen más de una vez en el archivo.
+      - `invalidos`: valores numéricos que no son un RUC de 11 dígitos (el
+        texto, como la razón social, se ignora sin contarlo)."""
     textos: list[str] = []
     if nombre.lower().endswith((".xlsx", ".xlsm")):
         try:
@@ -34,19 +38,25 @@ def extraer_rucs(contenido: bytes, nombre: str) -> tuple[list[str], int]:
             raise ProcesamientoError("No se pudo leer el archivo.") from exc
 
     rucs: list[str] = []
-    descartados = 0
+    repetidos = 0
+    invalidos: list[str] = []
     for texto in textos:
         limpio = normalizar_ruc(texto)
         encontrados = _RUC_RE.findall(limpio)
         if not encontrados:
-            descartados += 1
+            # Solo se reporta lo que parece un número de identificación (8
+            # dígitos o más): el texto y los correlativos (1, 2, 3…) se ignoran.
+            if limpio.isdigit() and len(limpio) >= 8:
+                invalidos.append(limpio)
             continue
         for ruc in encontrados:
-            if ruc not in rucs:
+            if ruc in rucs:
+                repetidos += 1
+            else:
                 rucs.append(ruc)
     if not rucs:
         raise ProcesamientoError("El archivo no tiene ningún RUC de 11 dígitos.")
-    return rucs, descartados
+    return {"rucs": rucs, "repetidos": repetidos, "invalidos": invalidos}
 
 
 class RetencionConfigService:
