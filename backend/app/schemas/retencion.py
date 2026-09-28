@@ -17,7 +17,8 @@ class RucsImportados(BaseModel):
     fuera (para cuadrar el total con el archivo)."""
 
     rucs: list[str]
-    # Veces que un RUC venía repetido en el archivo.
+    # Veces que un identificador venía repetido en el archivo.
     repetidos: int = 0
-    # Números que no son un RUC de 11 dígitos.
-    invalidos: list[str] = []
+    # Los que no tienen 11 dígitos: entran igual (pueden ser del exterior),
+    # pero se muestran para revisarlos.
+    dudosos: list[str] = []

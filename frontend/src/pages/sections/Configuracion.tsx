@@ -178,8 +178,10 @@ export function Configuracion() {
   }
 
   /** Agrega varios RUC a la vez y explica qué pasó con cada uno, para poder
-   *  cuadrar el total con el archivo o la lista pegada. */
-  function agregarRucs(lista: string[], repetidos: number, invalidos: string[]) {
+   *  cuadrar el total con el archivo o la lista pegada. Los que no tienen 11
+   *  dígitos entran igual (los proveedores del exterior tienen otro formato),
+   *  pero se listan para revisarlos. */
+  function agregarRucs(lista: string[], repetidos: number, dudosos: string[]) {
     const nuevos: string[] = [];
     let yaEstaban = 0;
     let repetidosEnLista = repetidos;
@@ -192,15 +194,15 @@ export function Configuracion() {
       setRetRucs((prev) => [...prev, ...nuevos]);
       marcarRet();
     }
-    const muestra = invalidos.slice(0, 5).join(", ");
+    const muestra = dudosos.slice(0, 5).join(", ");
     setRetAviso(
       [
         `${nuevos.length} agregados`,
         yaEstaban ? `${yaEstaban} ya estaban en la lista` : "",
         repetidosEnLista ? `${repetidosEnLista} repetidos en el archivo` : "",
-        invalidos.length
-          ? `${invalidos.length} no son RUC de 11 dígitos (${muestra}` +
-            (invalidos.length > 5 ? ", …)" : ")")
+        dudosos.length
+          ? `${dudosos.length} sin 11 dígitos, revísalos (${muestra}` +
+            (dudosos.length > 5 ? ", …)" : ")")
           : "",
       ]
         .filter(Boolean)
@@ -210,13 +212,14 @@ export function Configuracion() {
 
   /** Los RUC pegados a mano (una columna de Excel, comas, espacios…). */
   function agregarRetLista() {
-    const numeros = retPegado.split(/\D+/).filter(Boolean);
+    // Cada línea (o lo separado por comas/espacios) es un identificador: puede
+    // no ser un RUC de 11 dígitos si el proveedor es del exterior.
+    const valores = retPegado
+      .split(/[\n,;\t ]+/)
+      .map((v) => v.replace(/\.0$/, "").trim())
+      .filter((v) => /\d/.test(v));
     setRetPegado("");
-    agregarRucs(
-      numeros.filter((n) => n.length === 11),
-      0,
-      numeros.filter((n) => n.length !== 11)
-    );
+    agregarRucs(valores, 0, valores.filter((v) => !/^\d{11}$/.test(v)));
   }
 
   /** Los RUC de un Excel o CSV: los lee el servidor y los agrega a la lista. */
@@ -226,8 +229,8 @@ export function Configuracion() {
     if (!archivo || !token) return;
     setRetAviso("Leyendo el archivo…");
     try {
-      const { rucs, repetidos, invalidos } = await importarRucsRetencion(token, archivo);
-      agregarRucs(rucs, repetidos, invalidos);
+      const { rucs, repetidos, dudosos } = await importarRucsRetencion(token, archivo);
+      agregarRucs(rucs, repetidos, dudosos);
     } catch (err) {
       setRetAviso(null);
       setError(
@@ -726,7 +729,8 @@ export function Configuracion() {
 
         <p className="config__spHint">
           RUCs de proveedores que son agentes de retención (a ellos no se les
-          retiene):
+          retiene). Los del exterior pueden tener otro formato: se aceptan igual
+          y quedan marcados.
         </p>
 
         <div className="config__pegar">
@@ -782,7 +786,17 @@ export function Configuracion() {
                 .map((ruc, index) => ({ ruc, index }))
                 .filter(({ ruc }) => ruc.includes(retBusqueda.trim()))
                 .map(({ ruc, index }) => (
-                  <span className="config__ruc" key={index}>
+                  <span
+                    className={
+                      "config__ruc" + (/^\d{11}$/.test(ruc) ? "" : " is-dudoso")
+                    }
+                    key={index}
+                    title={
+                      /^\d{11}$/.test(ruc)
+                        ? undefined
+                        : "No tiene 11 dígitos: puede ser del exterior o estar mal escrito"
+                    }
+                  >
                     {ruc || "(vacío)"}
                     <button
                       type="button"

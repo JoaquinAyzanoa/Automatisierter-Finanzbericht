@@ -48,14 +48,15 @@ def _texto_celda(v) -> str:
 def extraer_rucs(contenido: bytes, nombre: str) -> dict:
     """RUCs de un archivo, sin repetir y en el orden en que aparecen.
 
-    Se busca la columna que trae los RUC (la que tiene más) y se revisa entera,
-    para poder avisar de sus valores malos: un RUC de menos dígitos, un DNI, o
-    uno que Excel guardó como número y quedó en notación científica. Si ninguna
-    columna destaca, se buscan RUCs en todas las celdas.
+    Se busca la columna que trae los RUC (la que tiene más) y se toma entera:
+    entran también los identificadores que no son un RUC peruano de 11 dígitos,
+    porque los proveedores del exterior tienen otro formato. Si ninguna columna
+    destaca, se buscan RUCs en todas las celdas.
 
-    Además del listado se informa qué quedó fuera, para cuadrar con el archivo:
-      - `repetidos`: RUCs que aparecen más de una vez.
-      - `invalidos`: valores de la columna de RUC que no son un RUC de 11 dígitos.
+    Además del listado se informa:
+      - `repetidos`: identificadores que aparecen más de una vez.
+      - `dudosos`: los que no tienen 11 dígitos, para revisarlos (pueden ser del
+        exterior, o un RUC mal escrito o recortado por Excel).
     """
     filas = _celdas(contenido, nombre)
     aciertos: dict[int, int] = {}
@@ -67,7 +68,7 @@ def extraer_rucs(contenido: bytes, nombre: str) -> dict:
 
     rucs: list[str] = []
     repetidos = 0
-    invalidos: list[str] = []
+    dudosos: list[str] = []
     for fila in filas:
         # La columna de RUC se revisa entera; del resto solo se toman los RUC.
         if columna is None:
@@ -78,15 +79,15 @@ def extraer_rucs(contenido: bytes, nombre: str) -> dict:
             celdas = []
         for celda in celdas:
             limpio = normalizar_ruc(celda)
-            if not limpio:
+            # Sin dígitos es texto (encabezado, razón social): no es un RUC.
+            if not limpio or not any(c.isdigit() for c in limpio):
                 continue
-            if _RUC_RE.fullmatch(limpio):
-                if limpio in rucs:
-                    repetidos += 1
-                else:
-                    rucs.append(limpio)
-            elif any(c.isdigit() for c in limpio):
-                invalidos.append(limpio)
+            if limpio in rucs:
+                repetidos += 1
+                continue
+            rucs.append(limpio)
+            if not _RUC_RE.fullmatch(limpio):
+                dudosos.append(limpio)
         if columna is not None:
             # Por si algún RUC quedó en otra columna de esa misma fila.
             for i, celda in enumerate(fila):
@@ -96,8 +97,8 @@ def extraer_rucs(contenido: bytes, nombre: str) -> dict:
                 if _RUC_RE.fullmatch(limpio) and limpio not in rucs:
                     rucs.append(limpio)
     if not rucs:
-        raise ProcesamientoError("El archivo no tiene ningún RUC de 11 dígitos.")
-    return {"rucs": rucs, "repetidos": repetidos, "invalidos": invalidos}
+        raise ProcesamientoError("El archivo no tiene ningún RUC.")
+    return {"rucs": rucs, "repetidos": repetidos, "dudosos": dudosos}
 
 
 class RetencionConfigService:

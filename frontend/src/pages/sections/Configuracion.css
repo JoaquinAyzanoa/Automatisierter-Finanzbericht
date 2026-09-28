@@ -227,6 +227,12 @@
   border-radius: 999px;
 }
 
+.config__ruc.is-dudoso {
+  color: #7a5b1e;
+  background: #fdf6e7;
+  border-color: #efdcb4;
+}
+
 .config__rucQuitar {
   display: grid;
   place-items: center;

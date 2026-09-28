@@ -393,10 +393,10 @@ export async function guardarRetencionConfig(
 /** Lee los RUC de un Excel o CSV. No guarda: solo devuelve lo que encontró. */
 export interface RucsImportados {
   rucs: string[];
-  /** Veces que un RUC venía repetido en el archivo. */
+  /** Veces que un identificador venía repetido en el archivo. */
   repetidos: number;
-  /** Números del archivo que no son un RUC de 11 dígitos. */
-  invalidos: string[];
+  /** Los que no tienen 11 dígitos: entran igual, pero conviene revisarlos. */
+  dudosos: string[];
 }
 
 export async function importarRucsRetencion(
