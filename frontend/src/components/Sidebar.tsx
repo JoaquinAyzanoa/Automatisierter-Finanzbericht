@@ -71,10 +71,6 @@ const NAV: NavItem[] = [
       </svg>
     ),
   },
-];
-
-// Van abajo del todo, encima de la cuenta.
-const NAV_ABAJO: NavItem[] = [
   {
     key: "configuracion",
     label: "Configuración",
@@ -87,17 +83,18 @@ const NAV_ABAJO: NavItem[] = [
       </svg>
     ),
   },
-  {
-    key: "acerca",
-    label: "Acerca de",
-    icon: (
-      <svg {...iconProps}>
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 11v5M12 8h.01" />
-      </svg>
-    ),
-  },
 ];
+
+const NAV_ACERCA: NavItem = {
+  key: "acerca",
+  label: "Acerca de",
+  icon: (
+    <svg {...iconProps}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 8h.01" />
+    </svg>
+  ),
+};
 
 const accountIcon = (
   <svg {...iconProps}>
@@ -131,7 +128,7 @@ export function Sidebar({ active, onSelect }: SidebarProps) {
       </div>
 
       <nav className="sidebar__nav">
-        {NAV.map((item) => (
+        {[...NAV, NAV_ACERCA].map((item) => (
           <button
             key={item.key}
             type="button"
@@ -146,23 +143,6 @@ export function Sidebar({ active, onSelect }: SidebarProps) {
           </button>
         ))}
       </nav>
-
-      <div className="sidebar__abajo">
-        {NAV_ABAJO.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            className={
-              "sidebar__item" + (active === item.key ? " is-active" : "")
-            }
-            aria-current={active === item.key ? "page" : undefined}
-            onClick={() => onSelect(item.key)}
-          >
-            <span className="sidebar__icon">{item.icon}</span>
-            <span className="sidebar__label">{item.label}</span>
-          </button>
-        ))}
-      </div>
 
       <div className="sidebar__footer">
         <button
