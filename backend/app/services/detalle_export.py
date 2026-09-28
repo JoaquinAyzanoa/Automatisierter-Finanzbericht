@@ -61,13 +61,9 @@ _OPERACION_RE = re.compile(r"^\s*Operaci.n\s+(\d+)", re.IGNORECASE)
 # Filas vigentes de las secciones fijas. La plantilla trae listas distintas;
 # estas son las que se emiten (editar aquí para agregar o quitar entradas).
 _PERSONAL_PROVEEDORES = [
-    "BANCO BCP",
-    "BANCO BBVA",
-    "BANCO INTERBANK",
-    "BANCO SCOTIABANK",
-    "BANCO FALABELLA",
+    "SUELDO PLANILLA Y PRACTICANTES",
     "SINDICATO DE TRABAJADORES RENASA",
-    "MARY OLGA SAICO  ICHPAS ",
+    "MARY OLGA SAICO  ICHPAS",
 ]
 # La sección que la plantilla titula 'PAGOS SEGUROS' se emite como 'PAGOS
 # ANTICIPADOS' y hoy va sin filas fijas: se llenan a mano.
