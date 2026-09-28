@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import {
+  ApiError,
   guardarAgentesConfig,
   guardarRetencionConfig,
   guardarSharepointConfig,
+  importarRucsRetencion,
   listarOperaciones,
   obtenerAgentesConfig,
   obtenerRetencionConfig,
@@ -74,6 +76,9 @@ export function Configuracion() {
   // ---- Retención ----
   const [retActivo, setRetActivo] = useState(true);
   const [retRucs, setRetRucs] = useState<string[]>([]);
+  const [retPegado, setRetPegado] = useState("");
+  const [retBusqueda, setRetBusqueda] = useState("");
+  const [retAviso, setRetAviso] = useState<string | null>(null);
   const [retSaving, setRetSaving] = useState(false);
   const [retDirty, setRetDirty] = useState(false);
   const [retSaved, setRetSaved] = useState(false);
@@ -167,19 +172,57 @@ export function Configuracion() {
     setRetSaved(false);
   }
 
-  function setRetRuc(index: number, valor: string) {
-    setRetRucs((prev) => prev.map((r, i) => (i === index ? valor : r)));
-    marcarRet();
-  }
-
-  function agregarRetRuc() {
-    setRetRucs((prev) => [...prev, ""]);
-    marcarRet();
-  }
-
   function quitarRetRuc(index: number) {
     setRetRucs((prev) => prev.filter((_, i) => i !== index));
     marcarRet();
+  }
+
+  /** Agrega varios RUC a la vez, sin repetir los que ya están. */
+  function agregarRucs(lista: string[], descartados: number) {
+    const nuevos: string[] = [];
+    let repetidos = 0;
+    for (const ruc of lista) {
+      if (retRucs.includes(ruc) || nuevos.includes(ruc)) repetidos += 1;
+      else nuevos.push(ruc);
+    }
+    if (nuevos.length) {
+      setRetRucs((prev) => [...prev, ...nuevos]);
+      marcarRet();
+    }
+    setRetAviso(
+      [
+        `${nuevos.length} agregados`,
+        repetidos ? `${repetidos} ya estaban` : "",
+        descartados ? `${descartados} descartados (no son RUC de 11 dígitos)` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    );
+  }
+
+  /** Los RUC pegados a mano (una columna de Excel, comas, espacios…). */
+  function agregarRetLista() {
+    const numeros = retPegado.split(/\D+/).filter(Boolean);
+    const validos = numeros.filter((n) => n.length === 11);
+    setRetPegado("");
+    agregarRucs(validos, numeros.length - validos.length);
+  }
+
+  /** Los RUC de un Excel o CSV: los lee el servidor y los agrega a la lista. */
+  async function importarRetExcel(e: ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0];
+    e.target.value = ""; // permite volver a elegir el mismo archivo
+    if (!archivo || !token) return;
+    setRetAviso("Leyendo el archivo…");
+    try {
+      const { rucs, descartados } = await importarRucsRetencion(token, archivo);
+      agregarRucs(rucs, descartados);
+    } catch (err) {
+      setRetAviso(null);
+      setError(
+        err instanceof ApiError ? err.message : "No se pudo leer el archivo."
+      );
+    }
   }
 
   async function guardarRetencion() {
@@ -637,11 +680,6 @@ export function Configuracion() {
       <div className="config__container">
         <div className="config__containerHead">
           <h3>Retención</h3>
-          {retActivo && (
-            <button type="button" className="config__add" onClick={agregarRetRuc}>
-              + Agregar
-            </button>
-          )}
         </div>
 
         <div className="config__spField">
@@ -680,33 +718,73 @@ export function Configuracion() {
           retiene):
         </p>
 
+        <div className="config__pegar">
+          <textarea
+            className="config__pegarArea"
+            rows={3}
+            placeholder="Pega aquí los RUC: uno por línea (tal cual los copias de Excel), o separados por comas o espacios."
+            value={retPegado}
+            onChange={(e) => {
+              setRetPegado(e.target.value);
+              setRetAviso(null);
+            }}
+          />
+          <div className="config__pegarBotones">
+            <button
+              type="button"
+              className="config__add"
+              onClick={agregarRetLista}
+              disabled={!retPegado.trim()}
+            >
+              Agregar a la lista
+            </button>
+            <label className="config__add config__add--sec">
+              <input type="file" accept=".xlsx,.xlsm,.csv,.txt" onChange={importarRetExcel} />
+              Subir Excel
+            </label>
+          </div>
+        </div>
+        {retAviso && <p className="config__spHint">{retAviso}</p>}
+
         {retRucs.length === 0 ? (
           <p className="config__empty">
-            No hay proveedores exceptuados. Usa «Agregar» para añadir un RUC.
+            No hay proveedores exceptuados. Pega arriba los RUC para agregarlos.
           </p>
         ) : (
-          <ul className="config__list">
-            {retRucs.map((ruc, index) => (
-              <li key={index} className="config__row">
-                <span className="config__label">Exceptuado {index + 1}</span>
+          <>
+            <div className="config__rucsHead">
+              <span>
+                {retRucs.length} {retRucs.length === 1 ? "RUC" : "RUCs"}
+              </span>
+              {retRucs.length > 12 && (
                 <input
                   type="text"
-                  className="config__text"
-                  placeholder="RUC del agente de retención (11 dígitos)"
-                  value={ruc}
-                  onChange={(e) => setRetRuc(index, e.target.value)}
+                  className="config__rucsBuscar"
+                  placeholder="Buscar RUC…"
+                  value={retBusqueda}
+                  onChange={(e) => setRetBusqueda(e.target.value)}
                 />
-                <button
-                  type="button"
-                  className="config__delete"
-                  onClick={() => quitarRetRuc(index)}
-                  aria-label={`Eliminar Exceptuado ${index + 1}`}
-                >
-                  {trashIcon}
-                </button>
-              </li>
-            ))}
-          </ul>
+              )}
+            </div>
+            <div className="config__rucs">
+              {retRucs
+                .map((ruc, index) => ({ ruc, index }))
+                .filter(({ ruc }) => ruc.includes(retBusqueda.trim()))
+                .map(({ ruc, index }) => (
+                  <span className="config__ruc" key={index}>
+                    {ruc || "(vacío)"}
+                    <button
+                      type="button"
+                      className="config__rucQuitar"
+                      onClick={() => quitarRetRuc(index)}
+                      aria-label={`Quitar ${ruc}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+            </div>
+          </>
         )}
         </>
         )}

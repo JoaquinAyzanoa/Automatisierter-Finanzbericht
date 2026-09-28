@@ -133,6 +133,119 @@
   border-color: var(--danger-border);
   background: var(--danger-bg);
 }
+/* ---- Lista de RUCs (retención): pegar muchos y verlos compactos ---- */
+.config__pegar {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 0 18px 12px;
+}
+
+.config__pegarArea {
+  flex: 1;
+  padding: 9px 12px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  resize: vertical;
+}
+
+.config__pegarArea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+  outline: none;
+}
+
+.config__pegarBotones {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.config__add--sec {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--border-strong);
+  text-align: center;
+  cursor: pointer;
+}
+
+.config__add--sec:hover {
+  background: var(--surface-muted);
+  border-color: var(--primary);
+}
+
+.config__add input[type="file"] {
+  display: none;
+}
+
+.config__rucsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 18px 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.config__rucsBuscar {
+  width: 180px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  outline: none;
+}
+
+.config__rucs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 0 18px 18px;
+}
+
+.config__ruc {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px 5px 10px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+}
+
+.config__rucQuitar {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.config__rucQuitar:hover {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
 
 .config__tagRow {
   display: flex;

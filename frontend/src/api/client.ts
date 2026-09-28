@@ -390,6 +390,24 @@ export async function guardarRetencionConfig(
   return (await res.json()) as RetencionConfig;
 }
 
+/** Lee los RUC de un Excel o CSV. No guarda: solo devuelve lo que encontró. */
+export async function importarRucsRetencion(
+  token: string,
+  archivo: File
+): Promise<{ rucs: string[]; descartados: number }> {
+  const form = new FormData();
+  form.append("archivo", archivo);
+  const res = await fetch(`${BASE}/retencion/rucs/importar`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseError(res));
+  }
+  return (await res.json()) as { rucs: string[]; descartados: number };
+}
+
 // ---- Procesos / Historial -------------------------------------------------
 
 export interface ProcesoResumen {

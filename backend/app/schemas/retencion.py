@@ -10,3 +10,10 @@ class RetencionConfigSchema(BaseModel):
     activo: bool = True
     # RUCs de proveedores que son agentes de retención (no se les retiene).
     rucs: list[str] = []
+
+
+class RucsImportados(BaseModel):
+    """RUCs leídos de un archivo, para agregarlos a la lista."""
+
+    rucs: list[str]
+    descartados: int
