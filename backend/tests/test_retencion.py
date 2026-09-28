@@ -32,7 +32,8 @@ def test_importar_rucs_de_un_excel(client):
     ws.append([2, 20100053455, "INTERBANK"])          # como número
     ws.append([3, " 20100047218 ", "REPETIDO"])
     ws.append([4, "10078481", "DNI de 8 dígitos, no es RUC"])
-    ws.append([5, "1234", "correlativo suelto: se ignora sin avisar"])
+    ws.append([5, "53", "muy corto"])
+    ws.append([6, 2.34075e12, "guardado como número: 2.34075E+12 en Excel"])
     buf = io.BytesIO()
     wb.save(buf)
 
@@ -46,8 +47,9 @@ def test_importar_rucs_de_un_excel(client):
     datos = r.json()
     assert datos["rucs"] == ["20100047218", "20100053455"]
     assert datos["repetidos"] == 1          # el RUC repetido
-    # Solo se avisa de lo que parece un identificador: el DNI, no el "1234".
-    assert datos["invalidos"] == ["10078481"]
+    # Se avisa de todo lo que está en la columna de RUC y no es un RUC, para
+    # poder cuadrar el total con el archivo. La columna "N°" no se toca.
+    assert datos["invalidos"] == ["10078481", "53", "2340750000000"]
 
     # Un archivo sin ningún RUC se rechaza con un mensaje claro.
     vacio = openpyxl.Workbook()
